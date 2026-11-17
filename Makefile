@@ -23,3 +23,7 @@ wazuh-up:
 .PHONY: agents
 agents:
 	$(PY) -m soc.wazuh.agents
+
+.PHONY: alerts
+alerts:  ## usage: make alerts ARGS="--last 1h --min-level 5"
+	$(PY) -m soc.wazuh.alerts $(ARGS)
