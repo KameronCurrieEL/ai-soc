@@ -13,7 +13,6 @@ PRIORITIES = ("low", "medium", "high", "critical")  # same scale as the AI analy
 # Actions the engine may propose. Only some change the system (Phase 7 gates those).
 ACTIONS = {
     "investigate": "human review, no change to any system",
-    "harden_config": "fix a configuration weakness (backlog task)",
     "block_ip": "block a source IP on the host firewall",
     "disable_account": "disable a local user account",
     "isolate_host": "cut the host off the network except the SOC",

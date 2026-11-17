@@ -38,3 +38,7 @@ wazuh-certs:
 .PHONY: eval
 eval:  ## score the AI analyst on data/eval/cases.json (~10 min on CPU)
 	$(PY) -m soc.ai.evaluate
+
+.PHONY: decide
+decide:  ## usage: make decide ARGS="--last 24h [--ai] [--eval]"
+	$(PY) -m soc.decision.engine $(ARGS)

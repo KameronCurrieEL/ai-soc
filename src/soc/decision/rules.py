@@ -90,8 +90,9 @@ def config_benchmark(alert: Alert) -> RuleHit | None:
     result = alert.details.get("result")
     check = alert.details.get("check") or alert.description
     if result == "failed":
-        return RuleHit("config_benchmark", "low", f"hardening check failed: {check}",
-                       _p(alert, "config_benchmark", "harden_config", check, "low", f"remediate: {check}"))
+        # No proposal: hundreds of these would bury real threats in the approval queue.
+        # They go to the hardening backlog report instead (engine.hardening_backlog).
+        return RuleHit("config_benchmark", "low", f"hardening check failed (see backlog): {check}")
     return RuleHit("config_benchmark", "low", f"configuration check {result or 'summary'}: no action")
 
 

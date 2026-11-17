@@ -50,9 +50,9 @@ def test_service_from_public_folder_is_high():
     assert (h.rule, h.priority) == ("new_service", "high")
 
 
-def test_sca_failed_is_low_with_harden_task_and_passed_has_no_action():
+def test_sca_failed_is_low_and_never_floods_the_approval_queue():
     [f] = hits("real-sca-failed")
-    assert f.priority == "low" and f.proposals[0].action == "harden_config"
+    assert f.priority == "low" and f.proposals == [] and "backlog" in f.reason
     [p] = hits("real-sca-passed")
     assert p.priority == "low" and p.proposals == []
 

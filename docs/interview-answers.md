@@ -211,3 +211,37 @@ Add your own version under "My answer" each time you practise.
 "After reviewing the labels, I updated the severity rubric to say failed benchmark checks are low and a stopped security agent is high. On the same eval set, the score was identical and those exact cases didn't change. With a 3B model, prompt wording had hit its ceiling. Without the eval set I'd have assumed the change worked. The remaining levers were a bigger model, which I can now test with one command, or moving those judgments into deterministic rules, which is what the decision engine does."
 
 **My answer:**
+
+---
+
+## Phase 6: Decision engine
+
+### 1. How does your decision engine combine rule-based detections with the AI's opinion?
+**Model answer:**
+"Rules come first: small pure functions that read parsed fields like source-IP scope, MITRE IDs, event IDs and file paths, and return a priority, a reason and proposed actions. The final priority is the maximum of the rule priority and the AI's severity, so the AI can escalate something the rules underrated, but can never talk a detection down. And the AI never creates actions; only rules do. I designed it that way because my eval showed the model under-called four real threats and could be prompt-injected into saying 'low'. On the eval set, the AI alone was 69% acceptable; the engine was 16 out of 16 with zero under-calls, with the caveat that I wrote the rules after seeing those cases."
+
+**My answer:**
+
+### 2. What safety guards did you build, and why do they run after the rules?
+**Model answer:**
+"Guards veto dangerous proposals: never block a loopback, private or reserved IP, which would be a self-inflicted outage; never disable SYSTEM, Administrator or machine accounts; reject unknown actions. They run after every rule, so even a buggy rule, or a future one, can't propose something harmful. They also don't trust labels from earlier stages: my eval data labeled a documentation IP as 'public', and the guard recomputed the scope itself and vetoed the block. Every veto is reported with a reason, so the approver sees what was blocked and why."
+
+**My answer:**
+
+### 3. Why did you write your own failed-logon correlation when Wazuh already has one?
+**Model answer:**
+"In testing, Wazuh's brute-force rule missed a burst of 10 failures that arrived in the same millisecond: the manager processed them in parallel, so its counter never saw them together. My correlator works on a batch of stored alerts, sorts by time, and uses a sliding window, 5 failures from one source in 5 minutes, so arrival order doesn't matter. On live data it found the burst Wazuh missed. Its output is fed through the same brute-force rule as Wazuh's alert, so both are judged identically. Defense in depth applies to detections too."
+
+**My answer:**
+
+### 4. Your first run produced 267 proposals. What was wrong and how did you fix it?
+**Model answer:**
+"262 of them were 'fix this CIS benchmark setting'. Every proposal goes to a human for approval, so the five real security events would have been buried; that's alert fatigue, the problem a SOC tool exists to solve. Configuration findings aren't incidents, so I moved failed checks into a hardening backlog report, grouped by policy and deduplicated, and kept the approval queue for security events only. The next run had 5 proposals. The lesson: measure the output volume a human has to handle, not just detection accuracy."
+
+**My answer:**
+
+### 5. Why didn't you use an agent framework like LangGraph or CrewAI?
+**Model answer:**
+"An agent framework's main value is letting a model plan and call tools on its own. My evaluation showed that's exactly what this model shouldn't do: it missed threats and followed injected instructions. The decision logic is a few pure functions and a loop, which plain Python handles well, is fully testable, has no dependencies, and I can explain every line. I recorded the decision with its trade-offs and the condition for revisiting it: if the approval workflow ever needs durable multi-step state that a queue and an audit log can't handle."
+
+**My answer:**
