@@ -12,7 +12,8 @@ def test_wazuh_severity_bands(level, expected):
 
 @pytest.mark.parametrize("ip,expected", [("::1", "loopback"), ("127.0.0.1", "loopback"),
                                          ("192.168.1.10", "private"), ("10.0.0.5", "private"),
-                                         ("fe80::1", "private"), ("8.8.8.8", "public"),
+                                         ("fe80::1", "private"), ("8.8.8.8", "public"), ("172.24.0.5", "private"), ("100.64.1.1", "private"),
+                                         ("203.0.113.7", "reserved"), ("0.0.0.0", "reserved"),
                                          ("-", None), (None, None), ("not-an-ip", None)])
 def test_ip_scope(ip, expected):
     assert ip_scope(ip) == expected

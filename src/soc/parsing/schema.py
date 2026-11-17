@@ -24,7 +24,7 @@ class Alert:
     mitre_tactics: tuple[str, ...] = ()
     user: str | None = None
     src_ip: str | None = None
-    src_ip_scope: str | None = None   # loopback | private | public
+    src_ip_scope: str | None = None   # loopback | private | public | reserved
     event_id: str | None = None       # e.g. Windows 4625
     related_count: int = 0            # correlation alerts: how many earlier events led to this one
     details: dict[str, str] = field(default_factory=dict)  # source-specific, human-readable extras
@@ -46,8 +46,14 @@ def wazuh_severity(level: int) -> str:
     return "low"
 
 
+# Explicit, so "private" means "our own network" (Python's is_private also includes
+# reserved/documentation ranges, which would mislead the decision engine).
+PRIVATE_NETS = [ipaddress.ip_network(n) for n in
+                ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7")]
+
+
 def ip_scope(ip: str | None) -> str | None:
-    """Classify an address so later stages never propose blocking ourselves or the LAN."""
+    """loopback | private | public | reserved: so later stages never propose blocking ourselves or the LAN."""
     if not ip:
         return None
     try:
@@ -56,6 +62,8 @@ def ip_scope(ip: str | None) -> str | None:
         return None
     if addr.is_loopback:
         return "loopback"
-    if addr.is_private or addr.is_link_local:
+    if addr.is_link_local or any(addr in net for net in PRIVATE_NETS if net.version == addr.version):
         return "private"
-    return "public"
+    if addr.is_global:
+        return "public"
+    return "reserved"  # documentation, multicast, unspecified, ...
