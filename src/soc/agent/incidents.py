@@ -27,6 +27,7 @@ class Incident:
     proposals: list[Proposal] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
     vetoed: list[str] = field(default_factory=list)
+    ai_notes: list[str] = field(default_factory=list)   # AI analyst summaries (advisory only)
 
     @property
     def id(self) -> str:
@@ -55,7 +56,8 @@ def _title(alert: Alert, family: str) -> str:
     return titles.get(family, alert.description)
 
 
-def group_incidents(results: list[tuple[Alert, Decision]], window_s: int = WINDOW_S) -> list[Incident]:
+def group_incidents(results: list[tuple[Alert, Decision]], window_s: int = WINDOW_S,
+                    ai_notes: dict[str, str] | None = None) -> list[Incident]:
     """Only decisions with proposals become incidents; low noise stays out of the queue."""
     actionable = sorted(((a, d) for a, d in results if d.proposals), key=lambda x: parse_time(x[0].timestamp))
     open_by_key: dict[str, Incident] = {}
@@ -81,4 +83,7 @@ def group_incidents(results: list[tuple[Alert, Decision]], window_s: int = WINDO
                 inc.proposals[inc.proposals.index(same)] = p
         inc.reasons += [r for r in d.reasons if r not in inc.reasons]
         inc.vetoed += [v for v in d.vetoed if v not in inc.vetoed]
+        note = (ai_notes or {}).get(alert.id)
+        if note and note not in inc.ai_notes:
+            inc.ai_notes.append(note)
     return incidents

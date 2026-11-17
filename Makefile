@@ -42,3 +42,7 @@ eval:  ## score the AI analyst on data/eval/cases.json (~10 min on CPU)
 .PHONY: decide
 decide:  ## usage: make decide ARGS="--last 24h [--ai] [--eval]"
 	$(PY) -m soc.decision.engine $(ARGS)
+
+.PHONY: soc
+soc:  ## analyst console, e.g. make soc ARGS="queue"
+	$(PY) -m soc.agent $(ARGS)

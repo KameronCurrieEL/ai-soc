@@ -1,0 +1,69 @@
+"""One pipeline run: fetch -> normalize -> decide (+AI) -> incidents -> queue.
+
+The pipeline only ever PROPOSES. Approval and execution live in soc.agent.approval.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass, field
+
+from soc.agent.incidents import group_incidents
+from soc.agent.store import audit, save_incidents
+from soc.decision.engine import decide_batch, hardening_backlog
+from soc.parsing.normalize import normalize
+from soc.parsing.schema import Alert
+from soc.wazuh.alerts import alerts_from_response, build_alerts_query, parse_window
+from soc.wazuh.indexer import indexer_settings, search
+
+MAX_ALERTS = 1000
+
+
+@dataclass
+class RunStats:
+    alerts: int = 0
+    decisions_with_proposals: int = 0
+    ai_calls: int = 0
+    incidents: int = 0
+    saved: dict = field(default_factory=dict)
+    backlog_checks: int = 0
+
+
+def fetch_alerts(env: dict[str, str], last: str) -> list[Alert]:
+    settings = indexer_settings(env)
+    if settings is None:
+        raise RuntimeError("set WAZUH_INDEXER_USER / WAZUH_INDEXER_PASSWORD in .env")
+    resp = search(settings, build_alerts_query(parse_window(last), size=MAX_ALERTS))
+    return [normalize(r) for r in alerts_from_response(resp)]
+
+
+def make_ai_analyst(env: dict[str, str], notes: dict[str, str], stats: RunStats):
+    """Wrap the AI analyst: returns severity for the engine, keeps the summary for the incident."""
+    from soc.ai.analyst import analyze
+    from soc.ai.llm import llm_from_env
+    llm = llm_from_env(env)
+
+    def analyst(alert: Alert) -> str | None:
+        stats.ai_calls += 1
+        r = analyze(alert, llm)
+        if r.analysis:
+            notes[alert.id] = f"[{r.analysis.severity}] {r.analysis.summary}"
+            return r.analysis.severity
+        return None
+    return analyst
+
+
+def run_pipeline(conn: sqlite3.Connection, alerts: list[Alert], analyst=None,
+                 ai_notes: dict[str, str] | None = None, stats: RunStats | None = None) -> RunStats:
+    stats = stats or RunStats()
+    stats.alerts = len(alerts)
+    results = decide_batch(alerts, analyst)
+    stats.decisions_with_proposals = sum(1 for _, d in results if d.proposals)
+    incidents = group_incidents(results, ai_notes=ai_notes)
+    stats.incidents = len(incidents)
+    stats.saved = save_incidents(conn, incidents)
+    stats.backlog_checks = sum(len(v) for v in hardening_backlog(alerts).values())
+    with conn:
+        audit(conn, "pipeline", "pipeline_run", alerts=stats.alerts, ai_calls=stats.ai_calls,
+              incidents=stats.incidents, **stats.saved)
+    return stats

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     alert_ids   TEXT NOT NULL,                     -- JSON list
     reasons     TEXT NOT NULL,                     -- JSON list
     vetoed      TEXT NOT NULL,                     -- JSON list
+    ai_notes    TEXT NOT NULL DEFAULT '[]',        -- JSON list, advisory AI summaries
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
@@ -105,9 +106,10 @@ def save_incidents(conn: sqlite3.Connection, incidents: list[Incident]) -> dict[
                 inc_id = inc.id
                 conn.execute(
                     "INSERT INTO incidents (id, key, title, priority, first_seen, last_seen, alert_ids, reasons,"
-                    " vetoed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " vetoed, ai_notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (inc_id, inc.key, inc.title, inc.priority, inc.first_seen, inc.last_seen,
-                     json.dumps(inc.alert_ids), json.dumps(inc.reasons), json.dumps(inc.vetoed), now(), now()),
+                     json.dumps(inc.alert_ids), json.dumps(inc.reasons), json.dumps(inc.vetoed),
+                     json.dumps(inc.ai_notes), now(), now()),
                 )
                 audit(conn, "pipeline", "incident_created", inc_id, title=inc.title, priority=inc.priority)
                 stats["new"] += 1
@@ -116,13 +118,15 @@ def save_incidents(conn: sqlite3.Connection, incidents: list[Incident]) -> dict[
                 alert_ids = list(dict.fromkeys(json.loads(row["alert_ids"]) + inc.alert_ids))
                 reasons = list(dict.fromkeys(json.loads(row["reasons"]) + inc.reasons))
                 vetoed = list(dict.fromkeys(json.loads(row["vetoed"]) + inc.vetoed))
+                ai_notes = list(dict.fromkeys(json.loads(row["ai_notes"]) + inc.ai_notes))
                 priority = max_priority(row["priority"], inc.priority)
                 last_seen = max(row["last_seen"], inc.last_seen, key=parse_time)
-                if (alert_ids, priority, last_seen) != (json.loads(row["alert_ids"]), row["priority"], row["last_seen"]):
+                old = (json.loads(row["alert_ids"]), row["priority"], row["last_seen"], json.loads(row["ai_notes"]))
+                if (alert_ids, priority, last_seen, ai_notes) != old:
                     conn.execute(
-                        "UPDATE incidents SET priority=?, last_seen=?, alert_ids=?, reasons=?, vetoed=?, updated_at=?"
-                        " WHERE id=?", (priority, last_seen, json.dumps(alert_ids), json.dumps(reasons),
-                                        json.dumps(vetoed), now(), inc_id))
+                        "UPDATE incidents SET priority=?, last_seen=?, alert_ids=?, reasons=?, vetoed=?, ai_notes=?,"
+                        " updated_at=? WHERE id=?", (priority, last_seen, json.dumps(alert_ids), json.dumps(reasons),
+                                                     json.dumps(vetoed), json.dumps(ai_notes), now(), inc_id))
                     if priority != row["priority"]:
                         audit(conn, "pipeline", "incident_escalated", inc_id, old=row["priority"], new=priority)
                     stats["updated"] += 1
