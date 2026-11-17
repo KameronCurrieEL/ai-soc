@@ -1,0 +1,11 @@
+# secrets
+.env
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+# outputs that may contain real alert data
+data/raw/
+data/outputs/
