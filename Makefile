@@ -14,7 +14,7 @@ test:
 
 .PHONY: wazuh-check
 wazuh-check:
-	$(PY) -m soc.wazuh.auth
+	$(PY) -m soc.wazuh.auth && $(PY) -m soc.wazuh.indexer
 
 .PHONY: wazuh-up
 wazuh-up:

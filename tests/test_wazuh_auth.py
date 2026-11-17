@@ -1,6 +1,7 @@
 import base64
 
-from soc.wazuh.auth import basic_auth_header, check_wazuh_api, token_from_response
+from soc.wazuh.auth import check_wazuh_api, token_from_response
+from soc.wazuh.client import basic_auth_header
 
 
 def test_basic_auth_header_is_base64_user_colon_password():
