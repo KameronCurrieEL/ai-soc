@@ -38,6 +38,13 @@ def _fix_path(p: str | None) -> str | None:
     return p.replace("\\\\", "\\") if p else p
 
 
+def _event_params(ev: dict) -> str | None:
+    """System-log events (e.g. 7040 service change) carry their data as param1..paramN."""
+    keys = sorted((k for k in ev if k.startswith("param") and k[5:].isdigit()), key=lambda k: int(k[5:]))
+    values = [v for v in (clean(ev[k]) for k in keys) if v]
+    return " | ".join(values) or None
+
+
 def _windows(raw: dict) -> dict:
     ev = _get(raw, "data", "win", "eventdata")
     sysinfo = _get(raw, "data", "win", "system")
@@ -48,6 +55,7 @@ def _windows(raw: dict) -> dict:
         "requested_by": clean(ev.get("subjectUserName")),
         "process": _fix_path(clean(ev.get("processName"))),
         "workstation": clean(ev.get("workstationName")),
+        "event_params": _event_params(ev),
     }
     return {
         "user": clean(ev.get("targetUserName")),

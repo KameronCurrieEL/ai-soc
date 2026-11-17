@@ -76,3 +76,12 @@ def test_empty_or_broken_alert_never_raises():
 
 def test_detect_source_by_location_fallback():
     assert detect_source({"location": "syscheck"}) == "fim"
+
+
+def test_windows_system_event_params_kept_in_order():
+    raw = {"decoder": {"name": "windows_eventchannel"}, "rule": {"id": "61104", "level": 3},
+           "data": {"win": {"system": {"eventID": "7040"},
+                            "eventdata": {"param10": "z", "param2": "auto start", "param1": "BITS svc",
+                                          "param3": "demand start", "param4": "-"}}}}
+    a = normalize(raw)
+    assert a.details["event_params"] == "BITS svc | auto start | demand start | z"
