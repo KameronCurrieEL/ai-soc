@@ -12,6 +12,7 @@ Each phase ends with: working demo, tests where sensible, a short writeup in doc
 | 5 | AI analyst | Ollama client, prompt, JSON schema validation, retry, eval set of ~10 sample alerts | Analyst returns valid JSON for all samples; results reviewed by you |
 | 6 | Decision engine | Rules + thresholds map analysis to proposed actions (e.g. brute force -> propose block) | Proposals generated with reasons; nothing executes |
 | 7 | Agent + approval | Orchestrate pipeline, queue proposals, CLI approve/reject, audit log; dry-run response | Approve in CLI -> action logged (and optionally run on lab host) |
+| 7b | Web dashboard | Small local web UI over the Phase 7 queue: incident list, AI summary + rule reasons, approve/reject buttons, audit view. Localhost only, CSRF-protected | Approve in the browser -> same audit log entry as the CLI |
 | 8 | Portfolio | README with architecture diagram, demo GIF, writeups, resume bullets | A stranger can read the repo and understand it in 5 minutes |
 
 ## Attack simulations to generate data (own lab only)
