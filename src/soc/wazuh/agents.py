@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from soc.checks import load_env
 from soc.wazuh.auth import get_token
-from soc.wazuh.client import request_json
+from soc.wazuh.client import request_json, tls_from_env
 
 AGENT_FIELDS = "id,name,ip,status,version,os.name,lastKeepAlive"
 MANAGER_AGENT_ID = "000"  # the manager monitoring itself
@@ -47,12 +47,12 @@ def agents_from_response(payload: dict, include_manager: bool = False) -> list[A
 
 def fetch_agents(env: dict[str, str]) -> list[Agent]:
     url = env.get("WAZUH_API_URL", "https://localhost:55000").rstrip("/")
-    verify = env.get("WAZUH_VERIFY_TLS") == "true"
-    token = get_token(url, env["WAZUH_API_USER"], env["WAZUH_API_PASSWORD"], verify)
+    tls = tls_from_env(env, "WAZUH_API")
+    token = get_token(url, env["WAZUH_API_USER"], env["WAZUH_API_PASSWORD"], tls)
     payload = request_json(
         f"{url}/agents?select={AGENT_FIELDS}",
         headers={"Authorization": f"Bearer {token}"},
-        verify_tls=verify,
+        tls=tls,
     )
     return agents_from_response(payload)
 

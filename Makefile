@@ -27,3 +27,10 @@ agents:
 .PHONY: alerts
 alerts:  ## usage: make alerts ARGS="--last 1h --min-level 5"
 	$(PY) -m soc.wazuh.alerts $(ARGS)
+
+# Copy the public certs we trust out of the running containers (re-run if Wazuh certs are regenerated).
+.PHONY: wazuh-certs
+wazuh-certs:
+	mkdir -p infra/certs
+	docker cp ai-soc-wazuh-wazuh.manager-1:/etc/ssl/root-ca.pem infra/certs/root-ca.pem
+	docker cp ai-soc-wazuh-wazuh.manager-1:/var/ossec/api/configuration/ssl/server.crt infra/certs/wazuh-api.pem

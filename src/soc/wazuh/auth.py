@@ -5,11 +5,12 @@ Run with:  python -m soc.wazuh.auth   (or `make wazuh-check`)
 
 from __future__ import annotations
 
+import ssl
 import sys
 import urllib.error
 
 from soc.checks import CheckResult, load_env
-from soc.wazuh.client import basic_auth_header, request_json
+from soc.wazuh.client import TlsConfig, basic_auth_header, request_json, tls_from_env
 
 AUTH_PATH = "/security/user/authenticate"
 
@@ -19,12 +20,12 @@ def token_from_response(payload: dict) -> str | None:
     return (payload.get("data") or {}).get("token")
 
 
-def get_token(url: str, user: str, password: str, verify_tls: bool = False) -> str:
+def get_token(url: str, user: str, password: str, tls: TlsConfig = TlsConfig()) -> str:
     payload = request_json(
         url.rstrip("/") + AUTH_PATH,
         method="POST",
         headers={"Authorization": basic_auth_header(user, password)},
-        verify_tls=verify_tls,
+        tls=tls,
     )
     token = token_from_response(payload)
     if not token:
@@ -38,11 +39,15 @@ def check_wazuh_api(env: dict[str, str]) -> CheckResult:
     if not user or not password:
         return CheckResult("wazuh", False, "set WAZUH_API_USER / WAZUH_API_PASSWORD in .env")
     try:
-        token = get_token(url, user, password, env.get("WAZUH_VERIFY_TLS") == "true")
+        token = get_token(url, user, password, tls_from_env(env, "WAZUH_API"))
     except urllib.error.HTTPError as exc:
         hint = "wrong credentials" if exc.code == 401 else "API still starting? retry in ~30s"
         return CheckResult("wazuh", False, f"{url} HTTP {exc.code} ({hint})")
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, ssl.SSLCertVerificationError):
+            return CheckResult("wazuh", False, f"{url} TLS certificate rejected ({exc.reason.verify_message})")
+        return CheckResult("wazuh", False, f"{url} unreachable ({exc})")
+    except (OSError, ValueError) as exc:
         return CheckResult("wazuh", False, f"{url} unreachable ({exc})")
     # A JWT is header.payload.signature; show only the start, never the whole token.
     return CheckResult("wazuh", True, f"{url} token issued ({token[:12]}..., {token.count('.') + 1} parts)")

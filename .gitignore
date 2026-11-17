@@ -12,3 +12,6 @@ data/outputs/
 
 # third-party Wazuh compose repo (cloned by infra/setup_wazuh.sh) incl. generated TLS keys
 infra/wazuh-docker/
+
+# public TLS certs copied from the lab containers (`make wazuh-certs`); lab-specific, not secret
+infra/certs/

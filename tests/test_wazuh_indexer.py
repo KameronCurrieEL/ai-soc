@@ -8,7 +8,7 @@ def test_settings_none_without_credentials():
 def test_settings_defaults_and_trailing_slash():
     s = indexer_settings({"WAZUH_INDEXER_USER": "u", "WAZUH_INDEXER_PASSWORD": "p",
                           "WAZUH_INDEXER_URL": "https://x:9200/"})
-    assert s.url == "https://x:9200" and s.verify_tls is False
+    assert s.url == "https://x:9200" and s.tls.verify is False
 
 
 def test_missing_credentials_fail_cleanly():

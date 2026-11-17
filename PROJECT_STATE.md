@@ -18,7 +18,10 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - 4624 -> rule 60106 (so far only SYSTEM service logons, logonType 5). 4625 -> rule 60122 (lvl 5).
   - Brute-force correlation 60204 (lvl 10, T1110) fired 3x on a 20-attempt run.
   - Sanitized samples in data/samples/ (4624, 4625, 60204).
-- Phases 3-8: not started
+- Phase 3 Retrieval: DONE 2026-11-17. 49 tests pass.
+  - `make agents` (manager API, Bearer token) and `make alerts ARGS="--last 1h --min-level 5 --rule 60204 --save"` (indexer _search).
+  - TLS verification ON: indexer verified against Wazuh root CA with expected name wazuh.indexer; API cert (self-signed) pinned. `make wazuh-certs` copies both into infra/certs/ (gitignored).
+- Phases 4-8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
 ## Lessons from the first attempt
@@ -45,17 +48,19 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - `make` isn't preinstalled on Ubuntu WSL: `sudo apt install make` (needs a real terminal for the sudo password, not the `!` prompt).
 - Wazuh API returns HTTP 500 for ~30s after start (users/RBAC not ready). Wait and retry.
 - Wazuh cert dir is root-owned 0500; setup script uses a `.certs_generated` marker file instead of looking inside.
-- Lab TLS verification is OFF (self-signed CA). Phase 3: verify against root-ca.pem.
+- TLS: indexer cert is issued to "wazuh.indexer" (not localhost) -> client checks that name while connecting to localhost (WAZUH_INDEXER_TLS_NAME). API cert is self-signed and separate from the root CA -> pinned (WAZUH_API_CA_FILE). If Wazuh certs are regenerated, re-run `make wazuh-certs`.
+- Alerts are NOT in the manager API in 4.x; they're in the indexer (9200, index pattern wazuh-alerts-*). Agents come from the manager API (55000).
+- 4624 rule 60106 so far only matches SYSTEM service logons; interactive user logons didn't produce 60106 alerts.
 - Windows agent ossec.conf had <address> hardcoded to the WSL eth0 IP (172.24.228.45), which changes on reboot. Fix: 127.0.0.1 (Docker Desktop publishes 1514/1515 on Windows localhost; verified port 1515 reachable).
 - Agent re-enrollment is automatic: when the manager rejects an old key, a 4.x agent requests a new one on 1515.
 - Generate 4625 with a NON-EXISTENT user: wrong passwords on your real account can trigger lockout (Win11 default ~10 attempts).
 - Rule 60204 did NOT fire on a 10-failure burst sent in the same millisecond (firedtimes out of order -> parallel processing). Fired fine with 1 s spacing. Phase 6: count failures ourselves, don't rely only on Wazuh correlation.
 - Wazuh maps single 4625 (60122) to T1531 "Account Access Removal" (questionable); only 60204 gets T1110. Parser: keep Wazuh MITRE tags but don't trust blindly.
 - In alerts, decoded Windows fields live under data.win.eventdata.* (rules refer to them as win.eventdata.*).
-- Indexer queries (9200) use admin creds; so far only ad hoc curl. Move to .env (WAZUH_INDEXER_*) when Phase 3 code needs them.
+- Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 3 (Retrieval): Python Wazuh client: auth (reuse soc.wazuh.auth), list agents, fetch alerts from the indexer for the last N hours; move indexer creds to .env (WAZUH_INDEXER_*).
+Phase 4 (Parsing): define our own alert schema (rule id, level, description, agent, user, src ip, time, MITRE ids, event id, logon type, status codes) in src/soc/parsing/; normalize the 3 samples in data/samples/ + unit tests. Keep Wazuh MITRE tags but don't trust blindly (60122 -> T1531).
 Session start: `make check && make wazuh-up && make wazuh-check`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 
@@ -90,3 +95,11 @@ Interview practice DEFERRED (owner's choice) until most phases are done: then an
 - Tell me about a detection that didn't fire when you expected it to.
 - Why point the agent at 127.0.0.1 instead of the WSL IP?
 - Why sanitize sample alerts before committing them?
+
+## Interview questions I can now answer (Phase 3)
+(Model answers: docs/interview-answers.md)
+- In Wazuh 4.x, where do agents and alerts live, and how do you query each?
+- How did you build a safe search query from user input?
+- What does TLS certificate verification check, and what's the risk of turning it off?
+- The indexer cert says "wazuh.indexer" but you connect to localhost. How did you verify it properly?
+- What is certificate pinning and when is it appropriate?

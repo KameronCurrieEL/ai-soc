@@ -9,12 +9,13 @@ Run with:  python -m soc.wazuh.indexer   (part of `make wazuh-check`)
 
 from __future__ import annotations
 
+import ssl
 import sys
 import urllib.error
 from dataclasses import dataclass
 
 from soc.checks import CheckResult, load_env
-from soc.wazuh.client import basic_auth_header, request_json
+from soc.wazuh.client import TlsConfig, basic_auth_header, request_json, tls_from_env
 
 ALERTS_INDEX = "wazuh-alerts-*"
 
@@ -24,7 +25,7 @@ class IndexerSettings:
     url: str
     user: str
     password: str
-    verify_tls: bool
+    tls: TlsConfig
 
 
 def indexer_settings(env: dict[str, str]) -> IndexerSettings | None:
@@ -36,7 +37,7 @@ def indexer_settings(env: dict[str, str]) -> IndexerSettings | None:
         url=env.get("WAZUH_INDEXER_URL", "https://localhost:9200").rstrip("/"),
         user=user,
         password=password,
-        verify_tls=env.get("WAZUH_VERIFY_TLS") == "true",
+        tls=tls_from_env(env, "WAZUH_INDEXER"),
     )
 
 
@@ -47,7 +48,7 @@ def search(settings: IndexerSettings, query: dict, index: str = ALERTS_INDEX) ->
         method="POST",
         headers={"Authorization": basic_auth_header(settings.user, settings.password)},
         body=query,
-        verify_tls=settings.verify_tls,
+        tls=settings.tls,
     )
 
 
@@ -63,12 +64,16 @@ def check_indexer(env: dict[str, str]) -> CheckResult:
         health = request_json(
             f"{s.url}/_cluster/health",
             headers={"Authorization": basic_auth_header(s.user, s.password)},
-            verify_tls=s.verify_tls,
+            tls=s.tls,
         )
     except urllib.error.HTTPError as exc:
         hint = "wrong credentials" if exc.code == 401 else "indexer still starting?"
         return CheckResult("indexer", False, f"{s.url} HTTP {exc.code} ({hint})")
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, ssl.SSLCertVerificationError):
+            return CheckResult("indexer", False, f"{s.url} TLS certificate rejected ({exc.reason.verify_message})")
+        return CheckResult("indexer", False, f"{s.url} unreachable ({exc})")
+    except (OSError, ValueError) as exc:
         return CheckResult("indexer", False, f"{s.url} unreachable ({exc})")
     status = health.get("status", "unknown")
     return CheckResult("indexer", status in ("green", "yellow"), f"{s.url} cluster status {status}")

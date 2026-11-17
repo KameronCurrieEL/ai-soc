@@ -109,3 +109,37 @@ Add your own version under "My answer" each time you practise.
 "Real alerts contain hostnames, usernames, SIDs and IPs, which is reconnaissance data for an attacker and personal data. Before committing, I replaced them with lab placeholders using a fixed mapping (so relationships between fields stay consistent) and grepped the output for the original values to prove nothing leaked. Raw data stays in a gitignored folder."
 
 **My answer:**
+
+---
+
+## Phase 3: Retrieval
+
+### 1. In Wazuh 4.x, where do agents and alerts live, and how do you query each?
+**Model answer:**
+"Two stores. The manager API on port 55000 knows the agents: I log in with Basic auth once, get a JWT, and send it as a Bearer token on each request, for example GET /agents. Alerts are stored in the indexer, which is OpenSearch, on port 9200, in daily indices named wazuh-alerts-4.x-date. I query those with POST /wazuh-alerts-*/_search and a JSON query. A common mistake is expecting alerts from the manager API; in 4.x they're not there."
+
+**My answer:**
+
+### 2. How did you build a safe search query from user input?
+**Model answer:**
+"The CLI takes a time window like 1h. I validate it against a strict pattern (digits plus m, h or d) and reject anything else, so input like '1h||+1d' can't change the date math. The query itself is built by a pure function that returns a dict: a bool query with only filters (time range, minimum level, agent id, rule ids), sorted newest first, with the result size capped at 1000. Because it's a pure function, I unit-test it without a running indexer, and the JSON is serialized by the library, never by string concatenation."
+
+**My answer:**
+
+### 3. What does TLS certificate verification check, and what's the risk of turning it off?
+**Model answer:**
+"It checks two things: the certificate chains to a CA I trust, and it was issued for the name of the server I meant to reach. With verification off, an attacker in the middle can present any certificate, and my client would send the indexer admin password to them. I started the lab with it off and then turned it on, and proved it works with negative tests: a wrong expected name and a wrong CA both get rejected."
+
+**My answer:**
+
+### 4. The indexer cert says "wazuh.indexer" but you connect to localhost. How did you verify it properly?
+**Model answer:**
+"Inside Docker the indexer is called wazuh.indexer, and that's the only name on its certificate. From WSL I reach it through a published port on localhost, so a normal hostname check fails. Instead of disabling the check, I verify against the Wazuh root CA and tell the TLS handshake to expect the name wazuh.indexer, similar to curl's --connect-to. The chain and the name are still both checked; only the network address differs."
+
+**My answer:**
+
+### 5. What is certificate pinning and when is it appropriate?
+**Model answer:**
+"Pinning means trusting one specific certificate (or key) instead of any certificate a CA signs. The Wazuh manager API uses its own self-signed cert, not signed by the root CA, so there's no CA to trust. I copied that exact cert and trust only it. The trade-off is maintenance: if the cert is regenerated, the client breaks until I update the pin, which is why I made it a one-command step (`make wazuh-certs`). It suits internal services with a known, small set of clients."
+
+**My answer:**
