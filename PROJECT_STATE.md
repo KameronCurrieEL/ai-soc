@@ -13,10 +13,11 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 ## Phase status
 - Phase 0 Workspace: DONE 2026-11-17. Health check all OK (Python 3.12, Docker 29.9.3, Ollama qwen2.5:3b at WSL gateway). 8 tests pass.
 - Phase 1 Wazuh lab: DONE 2026-11-17. `make wazuh-up` starts stack (project ai-soc-wazuh); dashboard login OK; `make wazuh-check` gets a JWT. 13 tests pass.
-- Phase 2 Telemetry: IN PROGRESS (paused 2026-11-17).
-  - Agent from attempt 1 (v4.9.2, "windows-host") was still installed; it auto-re-enrolled to the new manager as agent 001, status active.
-  - 4624 logon success already arriving as rule 60106 (x61 in 1h). 503 alerts/hour total from agent 001.
-  - NOT yet: 4625 failed logon (rule 60122), agent address fix.
+- Phase 2 Telemetry: DONE 2026-11-17.
+  - Agent 001 "windows-host" active, manager address now 127.0.0.1 (survives reboots).
+  - 4624 -> rule 60106 (so far only SYSTEM service logons, logonType 5). 4625 -> rule 60122 (lvl 5).
+  - Brute-force correlation 60204 (lvl 10, T1110) fired 3x on a 20-attempt run.
+  - Sanitized samples in data/samples/ (4624, 4625, 60204).
 - Phases 3-8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
@@ -48,21 +49,21 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Windows agent ossec.conf had <address> hardcoded to the WSL eth0 IP (172.24.228.45), which changes on reboot. Fix: 127.0.0.1 (Docker Desktop publishes 1514/1515 on Windows localhost; verified port 1515 reachable).
 - Agent re-enrollment is automatic: when the manager rejects an old key, a 4.x agent requests a new one on 1515.
 - Generate 4625 with a NON-EXISTENT user: wrong passwords on your real account can trigger lockout (Win11 default ~10 attempts).
+- Rule 60204 did NOT fire on a 10-failure burst sent in the same millisecond (firedtimes out of order -> parallel processing). Fired fine with 1 s spacing. Phase 6: count failures ourselves, don't rely only on Wazuh correlation.
+- Wazuh maps single 4625 (60122) to T1531 "Account Access Removal" (questionable); only 60204 gets T1110. Parser: keep Wazuh MITRE tags but don't trust blindly.
+- In alerts, decoded Windows fields live under data.win.eventdata.* (rules refer to them as win.eventdata.*).
 - Indexer queries (9200) use admin creds; so far only ad hoc curl. Move to .env (WAZUH_INDEXER_*) when Phase 3 code needs them.
 
 ## Next step
-Phase 2 (resume):
-1. Admin PowerShell: set agent <address> to 127.0.0.1 in C:\Program Files (x86)\ossec-agent\ossec.conf, `Restart-Service WazuhSvc`.
-2. Normal PowerShell: 10 failed logons as fake user `soc-test-user` via Start-Process -Credential (commands in session log / ask Claude).
-3. Claude verifies: agent reconnected; rule 60122 alerts present; check whether "multiple logon failures" correlation rule fired.
-4. Save one sanitized 4625 + one 4624 alert to data/samples/ for Phase 4. Then close Phase 2 (interview Q&A).
+Phase 3 (Retrieval): Python Wazuh client: auth (reuse soc.wazuh.auth), list agents, fetch alerts from the indexer for the last N hours; move indexer creds to .env (WAZUH_INDEXER_*).
+Before that: owner answers one Phase 2 interview question in own words.
 Session start: `make check && make wazuh-up && make wazuh-check`.
 Also pending: owner's own STAR story for Phase 1 Q4 (what actually broke in attempt 1).
 
 ## Concepts I can explain (interview check)
 - [~] Wazuh architecture: manager, indexer, dashboard, agent (Phase 1 covered manager/indexer/dashboard; agent in Phase 2)
-- [ ] Wazuh rule hierarchy / rule 60122
-- [ ] 4624 vs 4625
+- [~] Wazuh rule hierarchy / rule 60122 / correlation 60204
+- [~] 4624 vs 4625 (incl. subStatus codes)
 - [ ] Why AI output is structured, validated JSON
 - [ ] Why a human approval gate exists
 - [ ] MITRE ATT&CK mapping
@@ -82,3 +83,11 @@ Also pending: owner's own STAR story for Phase 1 Q4 (what actually broke in atte
 - Why do the Wazuh components use TLS, what is the root CA for, and what's the risk of disabling verification?
 - Tell me about a deployment problem you debugged. (cert bind-mount "not a directory"; API 500 startup race)
 - Why pin the version and make the setup script idempotent?
+
+## Interview questions I can now answer (Phase 2)
+(Model answers: docs/interview-answers.md)
+- What's the difference between 4624 and 4625, and which 4625 fields matter for triage?
+- How does a Wazuh correlation rule like 60204 work?
+- Tell me about a detection that didn't fire when you expected it to.
+- Why point the agent at 127.0.0.1 instead of the WSL IP?
+- Why sanitize sample alerts before committing them?

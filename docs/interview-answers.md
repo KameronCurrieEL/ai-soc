@@ -75,3 +75,37 @@ Add your own version under "My answer" each time you practise.
 "Pinning to v4.9.2 means the lab builds the same way every time; pulling 'latest' could silently change config formats or break the API my code depends on. Idempotent means running the script again is safe: it only clones if the folder is missing and only generates certs if a marker file says it hasn't happened. That matters here because regenerating certs on a running stack would break TLS between the components. I tested it by running the script twice; the second run changed nothing."
 
 **My answer:**
+
+---
+
+## Phase 2: Telemetry
+
+### 1. What's the difference between Windows event 4624 and 4625, and what fields matter when triaging a 4625?
+**Model answer:**
+"4624 is a successful logon, 4625 a failed one; both are in the Security log. On a 4625 I look at targetUserName (who they tried to log on as), logonType (2 interactive, 3 network, 10 RDP), ipAddress (where it came from) and subStatus, which says *why* it failed: 0xc0000064 means the user doesn't exist, 0xc000006a means the user exists but the password was wrong. Lots of 0xc0000064 suggests username guessing; lots of 0xc000006a against one account suggests password guessing against a real user."
+
+**My answer:**
+
+### 2. How does a Wazuh correlation rule like 60204 work?
+**Model answer:**
+"Rule 60122 fires on every single failed logon at level 5. Rule 60204 is stateful: it fires at level 10 when it has seen about 8 events from the authentication_failed group within 240 seconds with the same ipAddress, and it's mapped to MITRE T1110 Brute Force. After it fires the count resets, so one attack produces a few high alerts instead of one per attempt. The correlated alert also carries the previous events in previous_output, so the analyst sees the whole sequence."
+
+**My answer:**
+
+### 3. Tell me about a detection that didn't fire when you expected it to.
+**Model answer (STAR):**
+"Situation: I generated 10 failed logons to test Wazuh's brute-force rule (8 failures in 240s). Task: confirm the detection works. Action: all 10 single-failure alerts arrived, but the correlation alert didn't. I read the rule definition on the manager to check its conditions, saw all 10 events had the same timestamp and out-of-order firedtimes, so the manager processed the burst in parallel. I re-ran with 20 attempts spaced one second apart. Result: the rule fired three times, the first one counting the earlier 10 events still inside the window. Lesson: test detections, don't assume them, and don't rely on a single counting rule; my own decision engine also counts failures."
+
+**My answer:**
+
+### 4. Why point the Wazuh agent at 127.0.0.1 instead of the WSL IP?
+**Model answer:**
+"The manager runs in Docker in WSL. The WSL IP changes on every reboot, so a hardcoded address would silently break log collection, which is the worst kind of failure for a SIEM. Docker Desktop publishes the manager's ports (1514 events, 1515 enrollment) on Windows localhost, which never changes. I verified it by checking the agent was active with a fresh keepalive through the API."
+
+**My answer:**
+
+### 5. Why sanitize sample alerts before committing them?
+**Model answer:**
+"Real alerts contain hostnames, usernames, SIDs and IPs, which is reconnaissance data for an attacker and personal data. Before committing, I replaced them with lab placeholders using a fixed mapping (so relationships between fields stay consistent) and grepped the output for the original values to prove nothing leaked. Raw data stays in a gitignored folder."
+
+**My answer:**
