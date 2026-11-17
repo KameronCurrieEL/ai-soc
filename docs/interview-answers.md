@@ -245,3 +245,37 @@ Add your own version under "My answer" each time you practise.
 "An agent framework's main value is letting a model plan and call tools on its own. My evaluation showed that's exactly what this model shouldn't do: it missed threats and followed injected instructions. The decision logic is a few pure functions and a loop, which plain Python handles well, is fully testable, has no dependencies, and I can explain every line. I recorded the decision with its trade-offs and the condition for revisiting it: if the approval workflow ever needs durable multi-step state that a queue and an audit log can't handle."
 
 **My answer:**
+
+---
+
+## Phase 7: Agent + approval gate
+
+### 1. Walk me through what happens from a Wazuh alert to an executed response action.
+**Model answer:**
+"The pipeline fetches recent alerts from the Wazuh indexer, normalizes them into my schema, and runs the decision engine: deterministic rules, my own failed-logon correlation, and the local AI analyst only for alerts that pass a pre-filter. Decisions with proposals are grouped into incidents and saved to a SQLite queue. On my live data that was 1000 alerts, 5 decisions, 2 incidents, and only 5 AI calls. Then a human reviews an incident, the rule's reasons, the AI's advisory notes, and the proposals, and approves or rejects each one. Only an approved proposal can be executed, and execution is dry-run: it records the exact PowerShell command and its rollback in the audit log."
+
+**My answer:**
+
+### 2. How do you guarantee nothing runs without human approval?
+**Model answer:**
+"A proposal moves through a state machine: proposed, then approved or rejected, and only approved can become executed. Each transition is a single conditional SQL update, 'set approved where status is proposed', so it can't skip a state and two people can't approve the same thing twice. The approver must be a named human; the pipeline identity is refused. Approval also re-validates the target, so something that could never run safely can't even be approved. And live execution is disabled in the code; dry-run is the only mode. Every step, including refused approvals, is written to the audit log in the same transaction."
+
+**My answer:**
+
+### 3. How did you make the audit log trustworthy?
+**Model answer:**
+"It's append-only, enforced by the database, not just by my code: SQLite triggers abort any UPDATE or DELETE on the audit table, and I have tests proving it. Each entry has a timestamp, the actor, the event, the incident and proposal, and details like the reason, the command and the rollback. The entry is written in the same transaction as the change it describes, so a failed action leaves no misleading record. In production I'd go further and ship the log off the box, or hash-chain the entries, because someone with file access could still replace the whole database."
+
+**My answer:**
+
+### 4. How do you prevent command injection when a response action uses data from logs?
+**Model answer:**
+"Targets like usernames come from logs, so an attacker chooses them. In my eval an attacker-controlled username already fooled the AI. Before any command is built, each target must pass strict validation: block_ip must parse as an IP address and be public, account names must match a short allow-list pattern, host names a hostname pattern. Anything else, like 'bob; Stop-Computer', is refused and the refusal is audited. On top of that, the safety guards already veto blocking non-public IPs or disabling protected accounts. And in the console, log-derived text is quoted with control characters stripped, so terminal escape sequences can't change what the approver sees."
+
+**My answer:**
+
+### 5. Why group alerts into incidents, and how did you do it?
+**Model answer:**
+"Analysts handle incidents, not alerts. My brute-force test produced three Wazuh correlation alerts plus my own burst detection, four proposals for one event. I group decisions by rule family plus the entity, like the source IP, and keep adding to an incident while activity continues within 60 minutes. Incident IDs are a hash of the key and start time, so re-running the pipeline updates the same incident instead of duplicating it, and if new activity raises the priority, that's logged as an escalation."
+
+**My answer:**

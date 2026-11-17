@@ -36,7 +36,12 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - Eval set: AI alone 69% acceptable / 4 under-calls; engine 16/16, 0 under-calls (rules written after seeing cases: overfitting caveat).
   - Live 24h: 1001 alerts -> 5 proposals (1 high agent stop, 4 medium loopback brute force) + hardening backlog of 262 failed CIS checks (data/outputs/hardening-backlog.txt).
   - Own correlator caught the 10-failure burst Wazuh missed (27 failures 19:43:36-19:46:13 from ::1).
-- Phases 7-8: not started
+- Phase 7 Agent + approval: DONE 2026-11-17. 203 tests pass.
+  - src/soc/agent/: incidents.py (group by rule family + entity, 60 min window, stable INC ids), store.py (SQLite data/outputs/soc.db: incidents, proposals, audit_log; triggers make the audit log append-only; idempotent upsert/merge), approval.py (proposed->approved->executed / proposed->rejected via conditional UPDATE + audit in one transaction; named human required; close needs all proposals resolved), pipeline.py, cli.py (`make soc ARGS="run|queue|show|approve|reject|execute|close|audit"`).
+  - src/soc/response/actions.py: strict target validation (command injection), PowerShell command + rollback per action, dry-run only (live execution raises).
+  - Live: 1000 alerts -> 5 decisions -> 2 incidents, 5 AI calls (pre-filter). Owner handled both in the CLI: rejected agent-stop (planned restart), approved + dry-run executed the brute-force investigation, closed both. Audit log shows every step with actor + reason.
+- Phase 7b Web dashboard: not started
+- Phase 8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
 ## Lessons from the first attempt
@@ -80,12 +85,14 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - First engine run made 267 proposals, 262 of them CIS hardening tasks: alert fatigue. Failed SCA checks now go to a backlog report, not the approval queue.
 - Synthetic eval IPs use RFC 5737 documentation ranges (never real third parties); guards correctly veto blocking them.
 - Proposal targets can contain attacker-controlled text (e.g. the injected username). Phase 7 must display them as quoted, untrusted data.
+- Approval must be done by the owner, not Claude: an approval by the assistant would put a human name on a decision no human made.
+- Log-derived text (usernames, targets) is shown quoted with control characters stripped: terminal escape sequences could otherwise rewrite what the approver sees.
 - In alerts, decoded Windows fields live under data.win.eventdata.* (rules refer to them as win.eventdata.*).
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 7 (Agent + approval): src/soc/agent/ + src/soc/response/: pipeline run (fetch -> normalize -> decide -> optional AI), group proposals into incidents (same source/user within a window: today's 4 medium proposals are ONE incident), persistent queue (JSON/SQLite in data/outputs), CLI list/approve/reject with an append-only audit log (who, when, what, why), response actions in dry-run by default (print the exact netsh/PowerShell command, don't run it). Display attacker-controlled fields as quoted untrusted data.
-Session start: `make check && make wazuh-up && make wazuh-check`.
+Phase 7b (Web dashboard): local web UI over soc.agent.store/approval (no logic duplicated): incident list, incident detail (rule reasons, AI notes marked advisory, proposals, audit trail), approve/reject/execute/close forms, audit view. Bind 127.0.0.1 only; CSRF token on every POST; HTML-escape all log-derived text (XSS = the web version of the terminal-escape issue); approver name required. Decide stdlib http.server vs a small framework (record in docs/decisions.md).
+Session start: `make check && make wazuh-up && make wazuh-check`, then `make soc ARGS="run --last 24h"`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 
 ## Concepts I can explain (interview check)
@@ -93,7 +100,7 @@ Interview practice DEFERRED (owner's choice) until most phases are done: then an
 - [~] Wazuh rule hierarchy / rule 60122 / correlation 60204
 - [~] 4624 vs 4625 (incl. subStatus codes)
 - [x] Why AI output is structured, validated JSON
-- [~] Why a human approval gate exists (Phase 5 injection + under-calls; Phase 7 builds it)
+- [x] Why a human approval gate exists
 - [~] MITRE ATT&CK mapping (kept from Wazuh; 60122->T1531 questionable, 60204->T1110)
 
 ## Interview questions I can now answer (Phase 0)
@@ -151,3 +158,11 @@ Interview practice DEFERRED (owner's choice) until most phases are done: then an
 - Why did you write your own failed-logon correlation when Wazuh already has one?
 - Your first run produced 267 proposals. What was wrong and how did you fix it?
 - Why didn't you use an agent framework like LangGraph or CrewAI?
+
+## Interview questions I can now answer (Phase 7)
+(Model answers: docs/interview-answers.md)
+- Walk me through what happens from a Wazuh alert to an executed response action.
+- How do you guarantee nothing runs without human approval?
+- How did you make the audit log trustworthy?
+- How do you prevent command injection when a response action uses data from logs?
+- Why group alerts into incidents, and how did you do it?
