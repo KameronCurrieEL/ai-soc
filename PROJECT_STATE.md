@@ -56,9 +56,8 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 
 ## Next step
 Phase 3 (Retrieval): Python Wazuh client: auth (reuse soc.wazuh.auth), list agents, fetch alerts from the indexer for the last N hours; move indexer creds to .env (WAZUH_INDEXER_*).
-Before that: owner answers one Phase 2 interview question in own words.
 Session start: `make check && make wazuh-up && make wazuh-check`.
-Also pending: owner's own STAR story for Phase 1 Q4 (what actually broke in attempt 1).
+Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 
 ## Concepts I can explain (interview check)
 - [~] Wazuh architecture: manager, indexer, dashboard, agent (Phase 1 covered manager/indexer/dashboard; agent in Phase 2)
