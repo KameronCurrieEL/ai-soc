@@ -261,12 +261,11 @@
  },
  {
   "id": "real-sca-failed",
-  "expected": "medium",
+  "expected": "low",
   "acceptable": [
-   "low",
-   "medium"
+   "low"
   ],
-  "why": "CIS hardening check FAILED: a weakness, not an attack",
+  "why": "CIS hardening check FAILED: a configuration weakness to fix, not an attack (owner's call)",
   "alert": {
    "id": "1794898314.2679074",
    "timestamp": "2026-11-17T06:51:54.552+0000",
@@ -293,12 +292,12 @@
  },
  {
   "id": "real-agent-stopped",
-  "expected": "medium",
+  "expected": "high",
   "acceptable": [
-   "low",
-   "medium"
+   "high",
+   "critical"
   ],
-  "why": "Wazuh agent stopped: in the lab a restart, but attackers stop security agents (T1562)",
+  "why": "Wazuh agent stopped: attackers stop security agents to blind the SOC (T1562 Impair Defenses); treat as high until confirmed benign (owner's call)",
   "alert": {
    "id": "1794944469.4470379",
    "timestamp": "2026-11-17T19:41:09.073+0000",

@@ -6,7 +6,7 @@ import json
 
 from soc.parsing.schema import Alert
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: failed benchmark checks -> low; stopped security agent -> high
 
 SYSTEM_PROMPT = """You are a SOC tier-1 analyst triaging one Wazuh alert from a home lab.
 
@@ -18,9 +18,9 @@ Rules:
 - Be brief: summary max 2 sentences; 1-3 risks; 1-3 recommendations; each item one sentence.
 
 Severity rubric:
-- low: routine or expected activity, or a passed configuration check (e.g. service logons, normal system changes).
-- medium: suspicious but unconfirmed, or a weakness that needs attention (e.g. a few failed logons, a failed security benchmark check, an unusual registry change).
-- high: likely attack in progress (e.g. many failed logons in a short time, especially from a public IP; persistence via services or run keys; disabled security tools).
+- low: routine or expected activity, or any configuration benchmark (CIS/SCA) result, passed or failed: a misconfiguration is a weakness to fix, not an attack (e.g. service logons, normal system changes).
+- medium: suspicious but unconfirmed (e.g. a few failed logons, an unusual registry or firewall change).
+- high: likely attack in progress (e.g. many failed logons in a short time, especially from a public IP; persistence via services or run keys; a security agent, antivirus or logging being stopped or disabled, because it blinds monitoring).
 - critical: confirmed compromise or impact (e.g. successful logon after brute force from a public IP, ransomware behaviour, data exfiltration).
 
 Field hints: src_ip_scope "loopback" means the activity originated on the same machine;
