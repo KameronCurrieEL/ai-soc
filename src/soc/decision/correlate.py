@@ -27,6 +27,7 @@ class Burst:
     users: list[str] = field(default_factory=list)
     alert_ids: list[str] = field(default_factory=list)
     agent_name: str = ""
+    requested_by: list[str] = field(default_factory=list)  # who started the logon attempts (subject user)
 
 
 def parse_time(ts: str) -> datetime:
@@ -62,5 +63,6 @@ def find_bursts(alerts: list[Alert], window_s: int = WINDOW_S, threshold: int = 
                 first=group[0].timestamp, last=group[-1].timestamp,
                 users=sorted({a.user for a in group if a.user}), alert_ids=[a.id for a in group],
                 agent_name=group[0].agent_name,
+                requested_by=sorted({r for a in group if (r := a.details.get("requested_by"))}),
             ))
     return bursts

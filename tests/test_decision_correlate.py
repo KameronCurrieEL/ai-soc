@@ -5,7 +5,7 @@ from soc.parsing.schema import Alert
 def fail(i, ts, ip="::1", user="u", event="4625", mitre=()):
     return Alert(f"a{i}", ts, "windows_event", "60122", 5, "low", "fail", "001", "host",
                  mitre_ids=mitre, user=user, src_ip=ip, src_ip_scope="loopback" if ip == "::1" else "public",
-                 event_id=event)
+                 event_id=event, details={"requested_by": "labuser"})
 
 
 def ts(sec):
@@ -15,7 +15,7 @@ def ts(sec):
 def test_same_millisecond_burst_is_caught():
     alerts = [fail(i, "2026-11-17T19:43:36.260+0000") for i in range(10)]
     [b] = find_bursts(alerts)
-    assert b.count == 10 and b.source == "::1" and b.users == ["u"]
+    assert b.count == 10 and b.source == "::1" and b.users == ["u"] and b.requested_by == ["labuser"]
 
 
 def test_below_threshold_is_ignored():

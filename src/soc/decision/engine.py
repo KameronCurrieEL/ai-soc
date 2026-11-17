@@ -66,6 +66,7 @@ def burst_to_alert(b: Burst) -> Alert:
         agent_id="", agent_name=b.agent_name, mitre_ids=("T1110",), mitre_tactics=("Credential Access",),
         user=", ".join(b.users) or None, src_ip=b.src_ip, src_ip_scope=b.src_ip_scope, event_id="4625",
         related_count=b.count,
+        details={"requested_by": ", ".join(b.requested_by)} if b.requested_by else {},
     )
 
 
