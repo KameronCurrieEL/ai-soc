@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<section class="head">
+  <div>
+    <h1>Audit log</h1>
+    <p class="muted">Append-only: the database refuses UPDATE and DELETE on this table. Newest first.</p>
+  </div>
+</section>
+{% set audit = entries %}
+{% include "_audit_table.html" %}
+{% endblock %}

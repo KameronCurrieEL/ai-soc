@@ -1,0 +1,17 @@
+<table class="list audit">
+  <thead><tr><th>When (UTC)</th><th>Actor</th><th>Event</th><th>Incident</th><th>#</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for e in audit %}
+    <tr class="{{ 'human' if e['actor'] != 'pipeline' else '' }}">
+      <td>{{ e['at'][:19] | replace('T', ' ') }}</td>
+      <td>{{ e['actor'] }}</td>
+      <td>{{ e['event'] }}</td>
+      <td>{% if e['incident_id'] %}<a href="{{ url_for('incident', inc_id=e['incident_id']) }}">{{ e['incident_id'] }}</a>{% endif %}</td>
+      <td>{{ e['proposal_id'] or '' }}</td>
+      <td><code class="detail">{{ e['detail'] }}</code></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No entries.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

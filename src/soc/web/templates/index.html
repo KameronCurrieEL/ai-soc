@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="head">
+  <div>
+    <h1>{{ 'All incidents' if show_all else 'Open incidents' }}</h1>
+    <p class="muted">
+      {% if last_run %}Last pipeline run {{ last_run['at'][:19] | replace('T', ' ') }} UTC
+        ({{ (last_run['detail'] | fromjson)['alerts'] }} alerts){% else %}No pipeline run yet{% endif %}
+      · <a href="{{ url_for('index', all='0' if show_all else '1') }}">{{ 'show open only' if show_all else 'show closed too' }}</a>
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('run') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">Refresh from Wazuh (rules only)</button>
+  </form>
+</section>
+
+<section class="tiles">
+  {% for p in ['critical', 'high', 'medium', 'low'] %}
+    <div class="tile"><span class="badge b-{{ p }}">{{ p }}</span><strong>{{ counts[p] }}</strong><small>open</small></div>
+  {% endfor %}
+</section>
+
+{% if incidents %}
+<table class="list">
+  <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for i in incidents %}{% set r = i.row %}
+    <tr>
+      <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
+      <td><a href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><br><code class="muted">{{ r['id'] }}</code></td>
+      <td>{{ (r['alert_ids'] | fromjson) | length }}</td>
+      <td>{% if i.pending %}<strong>{{ i.pending }} pending</strong>{% elif i.approved %}{{ i.approved }} approved{% else %}{{ i.total }} resolved{% endif %}</td>
+      <td>{{ r['last_seen'][:19] | replace('T', ' ') }}</td>
+      <td><span class="status s-{{ r['status'] }}">{{ r['status'] }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">Queue is empty. Nothing needs a decision right now.</p>
+{% endif %}
+{% endblock %}

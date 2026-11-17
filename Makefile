@@ -46,3 +46,7 @@ decide:  ## usage: make decide ARGS="--last 24h [--ai] [--eval]"
 .PHONY: soc
 soc:  ## analyst console, e.g. make soc ARGS="queue"
 	$(PY) -m soc.agent $(ARGS)
+
+.PHONY: web
+web:  ## local dashboard on http://localhost:8765
+	$(PY) -m soc.web

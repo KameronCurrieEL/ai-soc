@@ -41,3 +41,25 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 - Final priority = max(rule priority, AI severity): the AI can raise, never lower. Proposals come only from rules; guards re-check targets themselves (they vetoed a block on a documentation IP that the data mislabeled "public").
 - Rules must be written and maintained by hand. The engine scores 16/16 on the eval set, but the rules were written after seeing those cases (overfitting risk): a held-out set of new cases is needed for an honest score.
 - Failed configuration checks go to a hardening backlog report, not the approval queue (they produced 262 of 267 proposals on day one).
+
+---
+
+## D3 (2026-11-17): Flask for the local web dashboard (Phase 7b)
+
+**Context.** The approval queue needs a browser UI. Options: Python's stdlib `http.server`, Flask, or a heavier framework (Django, FastAPI + frontend).
+
+**Decision.** Flask 3.1 (pinned in requirements.txt), server-rendered Jinja2 templates, no JavaScript. The UI is a thin layer over `soc.agent.store` / `approval` / `pipeline`; it contains no decision logic.
+
+**Why.**
+- Jinja2 autoescaping makes HTML-escaping the default, which is the main XSS defense when every page shows attacker-controlled log text. With `http.server` every value would need manual escaping: one miss = XSS.
+- Small, free, open source, well known; still explainable line by line.
+- Server-rendered forms with no JS allow a strict Content-Security-Policy (`default-src 'self'`).
+
+**Security controls (and why).**
+- Bind 127.0.0.1 only; reject any Host header other than localhost/127.0.0.1 (DNS rebinding).
+- Per-session CSRF token on every POST, compared with `hmac.compare_digest`; session cookie HttpOnly + SameSite=Strict.
+- CSP with `frame-ancestors 'none'` + `X-Frame-Options: DENY` (clickjacking on the Approve button).
+- Flask debug mode never enabled (its debugger allows code execution).
+- Same named-approver rule and audit log as the CLI.
+
+**Consequences.** Adds one runtime dependency (+ its 6 sub-dependencies). The Flask dev server is fine for a single local user but not for a shared deployment; that would need a production WSGI server, HTTPS and real authentication (out of scope for the lab).
