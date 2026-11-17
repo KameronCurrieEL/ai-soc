@@ -11,3 +11,11 @@ check:
 
 test:
 	$(PY) -m pytest -q
+
+.PHONY: wazuh-check
+wazuh-check:
+	$(PY) -m soc.wazuh.auth
+
+.PHONY: wazuh-up
+wazuh-up:
+	./infra/setup_wazuh.sh

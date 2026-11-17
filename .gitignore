@@ -9,3 +9,6 @@ __pycache__/
 # outputs that may contain real alert data
 data/raw/
 data/outputs/
+
+# third-party Wazuh compose repo (cloned by infra/setup_wazuh.sh) incl. generated TLS keys
+infra/wazuh-docker/
