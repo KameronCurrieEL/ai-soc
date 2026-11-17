@@ -13,7 +13,11 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 ## Phase status
 - Phase 0 Workspace: DONE 2026-11-17. Health check all OK (Python 3.12, Docker 29.9.3, Ollama qwen2.5:3b at WSL gateway). 8 tests pass.
 - Phase 1 Wazuh lab: DONE 2026-11-17. `make wazuh-up` starts stack (project ai-soc-wazuh); dashboard login OK; `make wazuh-check` gets a JWT. 13 tests pass.
-- Phases 2-8: not started
+- Phase 2 Telemetry: IN PROGRESS (paused 2026-11-17).
+  - Agent from attempt 1 (v4.9.2, "windows-host") was still installed; it auto-re-enrolled to the new manager as agent 001, status active.
+  - 4624 logon success already arriving as rule 60106 (x61 in 1h). 503 alerts/hour total from agent 001.
+  - NOT yet: 4625 failed logon (rule 60122), agent address fix.
+- Phases 3-8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
 ## Lessons from the first attempt
@@ -41,10 +45,19 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Wazuh API returns HTTP 500 for ~30s after start (users/RBAC not ready). Wait and retry.
 - Wazuh cert dir is root-owned 0500; setup script uses a `.certs_generated` marker file instead of looking inside.
 - Lab TLS verification is OFF (self-signed CA). Phase 3: verify against root-ca.pem.
+- Windows agent ossec.conf had <address> hardcoded to the WSL eth0 IP (172.24.228.45), which changes on reboot. Fix: 127.0.0.1 (Docker Desktop publishes 1514/1515 on Windows localhost; verified port 1515 reachable).
+- Agent re-enrollment is automatic: when the manager rejects an old key, a 4.x agent requests a new one on 1515.
+- Generate 4625 with a NON-EXISTENT user: wrong passwords on your real account can trigger lockout (Win11 default ~10 attempts).
+- Indexer queries (9200) use admin creds; so far only ad hoc curl. Move to .env (WAZUH_INDEXER_*) when Phase 3 code needs them.
 
 ## Next step
-Phase 2: Telemetry. Install the Wazuh agent on the Windows host, enroll it to the manager (port 1515), confirm it shows Active, then generate 4625 (failed logon) and 4624 (success) events and find them as alerts in the dashboard.
+Phase 2 (resume):
+1. Admin PowerShell: set agent <address> to 127.0.0.1 in C:\Program Files (x86)\ossec-agent\ossec.conf, `Restart-Service WazuhSvc`.
+2. Normal PowerShell: 10 failed logons as fake user `soc-test-user` via Start-Process -Credential (commands in session log / ask Claude).
+3. Claude verifies: agent reconnected; rule 60122 alerts present; check whether "multiple logon failures" correlation rule fired.
+4. Save one sanitized 4625 + one 4624 alert to data/samples/ for Phase 4. Then close Phase 2 (interview Q&A).
 Session start: `make check && make wazuh-up && make wazuh-check`.
+Also pending: owner's own STAR story for Phase 1 Q4 (what actually broke in attempt 1).
 
 ## Concepts I can explain (interview check)
 - [~] Wazuh architecture: manager, indexer, dashboard, agent (Phase 1 covered manager/indexer/dashboard; agent in Phase 2)

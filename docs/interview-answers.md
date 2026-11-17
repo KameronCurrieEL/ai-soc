@@ -66,7 +66,9 @@ Add your own version under "My answer" each time you practise.
 **Model answer:**
 "My first Wazuh attempt failed with 'error mounting filebeat.key: not a directory'. The compose file bind-mounts certificate files into the containers, but the certs hadn't been generated. When a bind-mount source doesn't exist, Docker creates an empty directory there, and you can't mount a directory onto a file. The fix was ordering: generate certs first. I put that in an idempotent setup script so it can't be skipped. A second one: the API returned HTTP 500 right after startup, not 401. I read the manager logs, saw it was still initializing, and changed my error message so a 500 says 'still starting' instead of wrongly blaming credentials."
 
-**My answer:**
+**My answer (first attempt, 2026-11-17):**
+"A problem that I got before trying this is making sure that Wazuh is reading the API keys correctly and actually able to accept them from Wazuh to the WSL."
+*Feedback: real problem, but too vague to score. Use STAR (Situation, Task, Action, Result), name the actual symptom/error, say what you checked, and end with a result. Wazuh uses username/password -> JWT token, not "API keys". Separate the two failure types: can't connect (network) vs connected but rejected (401 credentials) vs connected but server error (500 still starting).*
 
 ### 5. Why pin the version and make the setup script idempotent?
 **Model answer:**
