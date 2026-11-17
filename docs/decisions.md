@@ -20,3 +20,6 @@ Short records of choices that shape the project: context, decision, why, consequ
 - Quality is limited: in the first tests the 3B model hallucinated (called 4625 a *successful* logon; invented "persistence via svchost"). Mitigations: translate codes in the parser, strict output validation + one retry, a labeled eval set, and a human approval gate before any action.
 - Speed: CPU-only (no VRAM used), ~4-8 tokens/s, ~30-40 s per alert. Mitigations: 400-token cap, length limits in the schema, short-answer instructions. Not suitable for every alert in real time; Phase 6 should pre-filter what reaches the model.
 - Open: compare qwen2.5:7b (or similar) on the same eval set before deciding to switch.
+
+### D1 update (2026-11-17): eval results
+Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact severity, 69% acceptable, 4 under-calls (all real threats), and a successful prompt injection via the username field. Prompt v2 (rubric edits) produced identical scores. Conclusion: the model is useful for summaries and routine noise, not as the decision-maker. Phase 6 rules decide; AI severity may raise but never lower priority.
