@@ -34,3 +34,7 @@ wazuh-certs:
 	mkdir -p infra/certs
 	docker cp ai-soc-wazuh-wazuh.manager-1:/etc/ssl/root-ca.pem infra/certs/root-ca.pem
 	docker cp ai-soc-wazuh-wazuh.manager-1:/var/ossec/api/configuration/ssl/server.crt infra/certs/wazuh-api.pem
+
+.PHONY: eval
+eval:  ## score the AI analyst on data/eval/cases.json (~10 min on CPU)
+	$(PY) -m soc.ai.evaluate
