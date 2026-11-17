@@ -11,7 +11,7 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Ollama on Windows (qwen2.5:3b), reached from WSL via Windows host IP (changes after reboot)
 
 ## Phase status
-- Phase 0 Workspace: IN PROGRESS. Code done (checks.py, tests, Makefile, .env pattern); waiting on make/Docker/Ollama fixes on the host
+- Phase 0 Workspace: DONE 2026-11-17. Health check all OK (Python 3.12, Docker 29.9.3, Ollama qwen2.5:3b at WSL gateway). 8 tests pass.
 - Phases 1-8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
@@ -35,7 +35,8 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - `make` isn't preinstalled on Ubuntu WSL: `sudo apt install make`.
 
 ## Next step
-Phase 0: fix host-side issues until `make check` is all OK: install make, start Docker Desktop, expose Ollama to WSL (OLLAMA_HOST=0.0.0.0, firewall rule, `ollama pull qwen2.5:3b`). Then write Phase 0 interview questions and close the phase.
+Phase 1: Wazuh lab. Single-node Wazuh 4.9.2 via Docker Compose in infra/, dashboard reachable, manager API returns a token.
+(If `make` still isn't installed: run `sudo apt install -y make` in a real WSL terminal; meanwhile `PYTHONPATH=src .venv/bin/python -m soc.checks`.)
 
 ## Concepts I can explain (interview check)
 - [ ] Wazuh architecture: manager, indexer, dashboard, agent
@@ -44,3 +45,10 @@ Phase 0: fix host-side issues until `make check` is all OK: install make, start 
 - [ ] Why AI output is structured, validated JSON
 - [ ] Why a human approval gate exists
 - [ ] MITRE ATT&CK mapping
+
+## Interview questions I can now answer (Phase 0)
+- How does a WSL2 Linux VM reach a service running on the Windows host, and why can't you hardcode that IP?
+- Why does Ollama need OLLAMA_HOST=0.0.0.0 to be reachable from WSL? (loopback 127.0.0.1 vs all interfaces, plus firewall)
+- What's the difference between the docker CLI being installed and the Docker daemon running? How do you test the daemon?
+- How do you keep secrets out of a git repo? (.env + .gitignore + committed .env.example)
+- Why write health checks that return structured results and exit codes instead of just printing?
