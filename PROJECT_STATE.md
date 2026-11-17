@@ -47,6 +47,7 @@ Phase 1: Wazuh lab. Single-node Wazuh 4.9.2 via Docker Compose in infra/, dashbo
 - [ ] MITRE ATT&CK mapping
 
 ## Interview questions I can now answer (Phase 0)
+(Model answers + my practice attempts: docs/interview-answers.md)
 - How does a WSL2 Linux VM reach a service running on the Windows host, and why can't you hardcode that IP?
 - Why does Ollama need OLLAMA_HOST=0.0.0.0 to be reachable from WSL? (loopback 127.0.0.1 vs all interfaces, plus firewall)
 - What's the difference between the docker CLI being installed and the Docker daemon running? How do you test the daemon?
