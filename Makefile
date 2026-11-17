@@ -19,3 +19,7 @@ wazuh-check:
 .PHONY: wazuh-up
 wazuh-up:
 	./infra/setup_wazuh.sh
+
+.PHONY: agents
+agents:
+	$(PY) -m soc.wazuh.agents
