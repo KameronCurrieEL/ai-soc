@@ -21,7 +21,10 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Phase 3 Retrieval: DONE 2026-11-17. 49 tests pass.
   - `make agents` (manager API, Bearer token) and `make alerts ARGS="--last 1h --min-level 5 --rule 60204 --save"` (indexer _search).
   - TLS verification ON: indexer verified against Wazuh root CA with expected name wazuh.indexer; API cert (self-signed) pinned. `make wazuh-certs` copies both into infra/certs/ (gitignored).
-- Phases 4-8: not started
+- Phase 4 Parsing: DONE 2026-11-17. 83 tests pass.
+  - src/soc/parsing/: schema.py (Alert dataclass, wazuh_severity bands, ip_scope), windows.py (logon types + NTSTATUS -> words), normalize.py (dispatch by decoder: windows_event | fim | sca | wazuh | other).
+  - `make alerts ARGS="--last 24h --limit 1000 --json"` -> JSONL of normalized alerts (status lines on stderr). Stress test: 1000 real alerts, 0 crashes.
+- Phases 5-8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
 ## Lessons from the first attempt
@@ -56,11 +59,14 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Generate 4625 with a NON-EXISTENT user: wrong passwords on your real account can trigger lockout (Win11 default ~10 attempts).
 - Rule 60204 did NOT fire on a 10-failure burst sent in the same millisecond (firedtimes out of order -> parallel processing). Fired fine with 1 s spacing. Phase 6: count failures ourselves, don't rely only on Wazuh correlation.
 - Wazuh maps single 4625 (60122) to T1531 "Account Access Removal" (questionable); only 60204 gets T1110. Parser: keep Wazuh MITRE tags but don't trust blindly.
+- Python's ipaddress.is_private also covers documentation/reserved ranges (e.g. 203.0.113.0/24). ip_scope checks RFC1918/CGNAT/ULA explicitly and returns "reserved" for the rest.
+- SCA (config benchmark) alerts are ~40% of volume and many are level 7 ("medium") even when the check PASSED. Phase 6: don't treat SCA like attacks; filter result=passed.
+- Normalized output still contains real host/user names (only committed samples are sanitized). Fine for the local LLM; never commit data/outputs.
 - In alerts, decoded Windows fields live under data.win.eventdata.* (rules refer to them as win.eventdata.*).
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 4 (Parsing): define our own alert schema (rule id, level, description, agent, user, src ip, time, MITRE ids, event id, logon type, status codes) in src/soc/parsing/; normalize the 3 samples in data/samples/ + unit tests. Keep Wazuh MITRE tags but don't trust blindly (60122 -> T1531).
+Phase 5 (AI analyst): src/soc/ai/: Ollama client (stdlib HTTP, reuse OLLAMA_URL auto-detect from soc.checks), prompt built from a normalized Alert, JSON schema validation of the reply ({summary, severity, risks, recommendations}), one retry then logged failure. Eval set of ~10 normalized sample alerts with expected severity; owner reviews results.
 Session start: `make check && make wazuh-up && make wazuh-check`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 
@@ -70,7 +76,7 @@ Interview practice DEFERRED (owner's choice) until most phases are done: then an
 - [~] 4624 vs 4625 (incl. subStatus codes)
 - [ ] Why AI output is structured, validated JSON
 - [ ] Why a human approval gate exists
-- [ ] MITRE ATT&CK mapping
+- [~] MITRE ATT&CK mapping (kept from Wazuh; 60122->T1531 questionable, 60204->T1110)
 
 ## Interview questions I can now answer (Phase 0)
 (Model answers + my practice attempts: docs/interview-answers.md)
@@ -103,3 +109,11 @@ Interview practice DEFERRED (owner's choice) until most phases are done: then an
 - What does TLS certificate verification check, and what's the risk of turning it off?
 - The indexer cert says "wazuh.indexer" but you connect to localhost. How did you verify it properly?
 - What is certificate pinning and when is it appropriate?
+
+## Interview questions I can now answer (Phase 4)
+(Model answers: docs/interview-answers.md)
+- Why normalize alerts into your own schema instead of passing raw SIEM JSON along?
+- How do you handle alerts from different sources (Windows events, FIM, SCA) in one schema?
+- Why translate codes like 0xc0000064 before sending alerts to the LLM?
+- How did you make the parser robust against malformed or unexpected alerts?
+- Why does your schema classify source IPs as loopback/private/public/reserved?

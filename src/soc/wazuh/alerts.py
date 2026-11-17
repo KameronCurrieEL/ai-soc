@@ -1,6 +1,8 @@
 """Fetch recent Wazuh alerts from the indexer.
 
-Run with:  python -m soc.wazuh.alerts --last 1h [--min-level 5] [--agent 001] [--rule 60122] [--save]
+Run with:  python -m soc.wazuh.alerts --last 1h [--min-level 5] [--agent 001] [--rule 60122] [--save] [--json]
+
+--json prints normalized alerts (our schema, see soc.parsing) as JSON Lines.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from soc.checks import load_env
+from soc.parsing.normalize import normalize
 from soc.wazuh.indexer import indexer_settings, search
 
 MAX_RESULTS = 1000
@@ -96,6 +99,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--rule", action="append", help="rule id; repeat for several")
     p.add_argument("--limit", type=int, default=50, help=f"max alerts to fetch (<= {MAX_RESULTS})")
     p.add_argument("--save", action="store_true", help=f"save raw alerts to {RAW_DIR}/")
+    p.add_argument("--json", action="store_true", help="print normalized alerts as JSON Lines")
     return p.parse_args(argv)
 
 
@@ -114,10 +118,12 @@ def main(argv: list[str] | None = None) -> int:
     resp = search(settings, query)
     alerts = alerts_from_response(resp)
     for a in reversed(alerts):  # print oldest -> newest, like a log
-        print(summarize_alert(a))
-    print(f"-- showing {len(alerts)} of {total_hits(resp)} matching alerts (last {args.last})")
+        print(json.dumps(normalize(a).to_dict()) if args.json else summarize_alert(a))
+    # status lines go to stderr in --json mode, so stdout stays pure JSONL
+    out = sys.stderr if args.json else sys.stdout
+    print(f"-- showing {len(alerts)} of {total_hits(resp)} matching alerts (last {args.last})", file=out)
     if args.save and alerts:
-        print(f"-- saved raw alerts to {save_raw(alerts)}")
+        print(f"-- saved raw alerts to {save_raw(alerts)}", file=out)
     return 0
 
 

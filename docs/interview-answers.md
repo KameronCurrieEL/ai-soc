@@ -143,3 +143,37 @@ Add your own version under "My answer" each time you practise.
 "Pinning means trusting one specific certificate (or key) instead of any certificate a CA signs. The Wazuh manager API uses its own self-signed cert, not signed by the root CA, so there's no CA to trust. I copied that exact cert and trust only it. The trade-off is maintenance: if the cert is regenerated, the client breaks until I update the pin, which is why I made it a one-command step (`make wazuh-certs`). It suits internal services with a known, small set of clients."
 
 **My answer:**
+
+---
+
+## Phase 4: Parsing
+
+### 1. Why normalize alerts into your own schema instead of passing raw SIEM JSON along?
+**Model answer:**
+"Raw Wazuh alerts are large, nested, and field names depend on the log source. I defined a small flat Alert dataclass (rule, level, agent, user, source IP, event id, MITRE ids, plus a details dict) and every later stage, the AI prompt, decision rules and audit log, depends only on that. It decouples the pipeline from the SIEM: switching to Elastic or Splunk means writing one new parser, not touching the AI or decision code. It also shrinks the prompt, which matters for a small local model's context window."
+
+**My answer:**
+
+### 2. How do you handle alerts from different sources in one schema?
+**Model answer:**
+"In my lab, alerts came from four sources: Windows event logs, file/registry integrity monitoring, configuration benchmark checks (SCA) and Wazuh's own events. Every alert shares common fields (rule, level, agent, time, MITRE). The normalizer looks at which Wazuh decoder produced the alert and dispatches to a small extractor per source, which fills user/source IP where they make sense and puts source-specific facts, like a registry path or a benchmark check result, in a details dict. Unknown sources fall back to Wazuh's generic fields like srcip and dstuser, so a new log type degrades gracefully instead of breaking."
+
+**My answer:**
+
+### 3. Why translate codes like 0xc0000064 before sending alerts to the LLM?
+**Model answer:**
+"A 3-billion-parameter local model doesn't reliably know Windows NTSTATUS codes, and if it guesses, it hallucinates. Translating in code is deterministic and testable: 0xc0000064 becomes 'user does not exist', logon type 10 becomes 'remote interactive (RDP)'. I also prefer SubStatus over Status because it's more specific. The rule is: anything that can be looked up should be done in code, and the model only does the reasoning."
+
+**My answer:**
+
+### 4. How did you make the parser robust against malformed or unexpected alerts?
+**Model answer:**
+"The normalizer never raises on missing fields. A safe lookup helper always returns an object, Windows placeholders like '-' become missing values, and non-numeric levels default to 0. Tests include an empty alert and a broken one where a field has the wrong type; that test actually caught a crash. Then I stress-tested it on 1000 real alerts from the last 24 hours: zero crashes, and every source produced its expected details."
+
+**My answer:**
+
+### 5. Why does your schema classify source IPs as loopback/private/public/reserved?
+**Model answer:**
+"Because the decision engine will propose actions like blocking an IP, and blocking loopback or your own LAN would cause an outage, effectively a self-inflicted denial of service. My test attack came from ::1, which must never be blocked. I also learned that Python's is_private includes documentation and reserved ranges, so I check the private ranges (RFC 1918, carrier-grade NAT, IPv6 ULA) explicitly and label everything else that isn't globally routable as reserved."
+
+**My answer:**
