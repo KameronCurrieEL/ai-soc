@@ -52,10 +52,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     """Feed alerts from another source (a JSON file of raw alerts) through the same pipeline."""
     from soc.agent.pipeline import RunStats, alerts_from_file, run_pipeline
     alerts = alerts_from_file(args.file, args.sensor)
-    with store.connect() as conn:
+    with store.connect_tenant(store.DB_PATH, args.tenant) as conn:
         stats = run_pipeline(conn, alerts, None, {}, RunStats())
     s = stats.saved
-    print(f"ingested {stats.alerts} alerts from sensor '{args.sensor}' -> {stats.incidents} incidents "
+    print(f"ingested {stats.alerts} alerts from sensor '{args.sensor}' into tenant '{args.tenant}' -> "
+          f"{stats.incidents} incidents "
           f"({s.get('new', 0)} new, {s.get('updated', 0)} updated, {s.get('new_proposals', 0)} new proposals)")
     return 0
 
@@ -154,6 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     g = sub.add_parser("ingest", help="ingest alerts from another source (JSON file)")
     g.add_argument("--file", required=True, help="JSON list of raw alerts")
     g.add_argument("--sensor", required=True, help="name of the source/collector (e.g. wazuh-branch2)")
+    g.add_argument("--tenant", default="default", help="tenant to ingest into (default: default)")
     g.set_defaults(fn=cmd_ingest)
     q = sub.add_parser("queue", help="list incidents")
     q.add_argument("--all", action="store_true", help="include closed incidents")

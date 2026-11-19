@@ -13,6 +13,14 @@ Everything here happens on your own lab machine only. Response actions are dry-r
 
 ---
 
+## Quick demo tenant (clean, for screenshots/sharing)
+
+A ready-made, sanitized workspace separate from your real data:
+- Log in at http://localhost:8765 as **demo / demo-pass** (tenant `demo`, analyst).
+- It has ~117 recent alerts from two sources, one open brute-force incident, and one closed (benign).
+- Rebuild it anytime: `make soc ARGS="ingest --file <samples.json> --sensor wazuh-hq --tenant demo"`.
+- Capture guide: `docs/screenshots/README.md`.
+
 ## 0. Start the lab (every session)
 
 ```bash

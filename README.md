@@ -8,6 +8,16 @@ Everything runs on one laptop: Wazuh in Docker, Python in WSL2, the language mod
 
 ---
 
+## Screenshots
+
+| Overview | Live alerts | Incident |
+|---|---|---|
+| ![Overview dashboard](docs/screenshots/overview.png) | ![Live alert feed](docs/screenshots/live-alerts.png) | ![Incident detail](docs/screenshots/incident.png) |
+
+| Red-team responder | Detection quality | Users & tenants |
+|---|---|---|
+| ![AI responder](docs/screenshots/responder.png) | ![Detection quality metrics](docs/screenshots/metrics.png) | ![Users and roles](docs/screenshots/users.png) |
+
 ## Architecture
 
 ```mermaid
