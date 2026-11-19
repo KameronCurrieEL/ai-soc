@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ p.value }}{% endblock %}
+{% block content %}
+{% from "_macros.html" import elink %}
+<p><a href="{{ url_for('index') }}">&larr; queue</a></p>
+<section class="head">
+  <div>
+    <h1><small class="muted">{{ label }}</small> <code>{{ p.value }}</code></h1>
+    <p class="muted">
+      {% if p.alerts %}{{ p.alerts | length }} stored alert(s) ·
+        {{ p.alerts[0]['timestamp'][:19] | replace('T', ' ') }} &rarr; {{ p.alerts[-1]['timestamp'][:19] | replace('T', ' ') }} UTC ·
+        {% for prio, n in counts.items() %}<span class="badge b-{{ prio }}">{{ n }} {{ prio }}</span> {% endfor %}
+      {% else %}No stored alerts in the last {{ retention_days }} days.{% endif %}
+      · {{ p.incidents | length }} incident(s)
+    </p>
+  </div>
+</section>
+
+{% if location %}
+<section class="card where">
+  <h2>Location</h2>
+  <div class="loc">
+    <div class="loc-head"><strong>{{ location.place }}</strong>
+      <span class="scope sc-{{ location.scope }}">{{ location.scope }}</span></div>
+    <p class="muted">{{ location.explanation }}</p>
+  </div>
+  {% if location.country_code %}<p class="attrib">{{ geo_attribution }}</p>{% endif %}
+</section>
+{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>Incidents</h2>
+    {% if p.incidents %}
+    <ul class="plain">
+      {% for r in p.incidents %}
+      <li><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span>
+        <a href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a>
+        <span class="status s-{{ r['status'] }}">{{ r['status'] }}</span>
+        {% if r['verdict'] %}<small class="muted">· {{ r['verdict'] }}</small>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">Not part of any incident.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Seen together with <small class="muted">click to pivot</small></h2>
+    {% if p.related %}
+    <dl class="kv">
+      {% for etype, ents in p.related.items() %}
+      <dt>{{ ents[0].label }}</dt>
+      <dd>{% for e in ents[:15] %}{{ elink(etype, e.value) }}{% if e.count > 1 %} <small class="muted">×{{ e.count }}</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}
+        {% if ents | length > 15 %}<br><small class="muted">+{{ ents | length - 15 }} more</small>{% endif %}</dd>
+      {% endfor %}
+    </dl>
+    {% else %}<p class="muted">Nothing stored to correlate with.</p>{% endif %}
+  </section>
+</div>
+
+<h2>Activity <small class="muted">UTC, repeats collapsed</small></h2>
+<ol class="timeline">
+  {% for t in timeline %}
+  <li class="tl-{{ t.kind }}">
+    <time>{{ t.at.strftime('%b %d %H:%M:%S') }}{% if t.until %} &ndash; {{ t.until.strftime('%H:%M:%S') }}{% endif %}</time>
+    <div>
+      <strong>{% if t.count > 1 %}{{ t.count }}&times; {% endif %}{{ t.title }}</strong>
+      {% if t.priority %}<span class="badge b-{{ t.priority }}">{{ t.priority }}</span>{% endif %}
+      {% if t.detail %}<div class="detail">{{ t.detail }}</div>{% endif %}
+    </div>
+  </li>
+  {% else %}<li class="muted">No stored alerts. Run the pipeline to store alerts (kept {{ retention_days }} days).</li>{% endfor %}
+</ol>
+{% endblock %}

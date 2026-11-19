@@ -131,6 +131,29 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
             hosts=hosts, locations=locations, involved=involved, geo_attribution=geoip.ATTRIBUTION,
             timeline=insights.timeline(alert_rows, audit_rows))
 
+    @app.get("/entity")
+    def entity():
+        """Pivot page. Query string (not path) because values contain ':' '\\' and spaces."""
+        etype = request.args.get("type", "")
+        value = request.args.get("value", "")[:300]
+        if etype not in insights.ENTITY_TYPES or not value:
+            abort(404)
+        conn = db()
+        p = insights.pivot(etype, value, store.recent_alerts(conn, hours=store.ALERT_RETENTION_DAYS * 24),
+                           store.list_incidents(conn, None))
+        location = None
+        if etype == "ip":
+            hosts = [e.value for e in p.related.get("host", [])]
+            if not hosts and p.incidents:
+                hosts = insights.hosts_and_ips(p.incidents[0], [])[0]
+            geo_db = geoip.default_db() if ip_scope(value) == "public" else None
+            location = geoip.locate(value, hosts[0] if hosts else None, geo_db)
+        counts = {prio: n for prio in reversed(insights.PRIORITY_ORDER)
+                  if (n := sum(r["priority"] == prio for r in p.alerts))}
+        return render_template("entity.html", p=p, label=insights.ENTITY_TYPES[etype][0], location=location,
+                               counts=counts, timeline=insights.timeline(p.alerts, []),
+                               retention_days=store.ALERT_RETENTION_DAYS, geo_attribution=geoip.ATTRIBUTION)
+
     @app.get("/audit")
     def audit_view():
         return render_template("audit.html", entries=store.audit_entries(db(), limit=300))

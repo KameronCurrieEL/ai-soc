@@ -109,6 +109,11 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 details.raw { margin-top: 24px; }
 details.raw summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 
+ul.plain { list-style: none; padding: 0; margin: 0; }
+ul.plain li { padding: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.elink code { color: var(--accent); }
+.elink:hover code { text-decoration: underline; }
+
 @media (max-width: 720px) {
   .timeline li { grid-template-columns: 1fr; gap: 2px; }
   .grid { grid-template-columns: 1fr; }

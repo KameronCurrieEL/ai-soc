@@ -155,3 +155,38 @@ def test_old_incident_without_stored_alerts_falls_back_to_key(env, monkeypatch):
     page = client.get(f"/incident/{inc_id}").get_data(as_text=True)
     assert "This computer (windows-host)" in page and "weren't stored" in page
     assert "DB-IP" not in page
+
+
+def test_entity_page_pivots_from_ip_to_accounts_and_incidents(env, monkeypatch):
+    from soc.enrich import geoip
+    monkeypatch.setattr(geoip, "default_db", lambda: geoip.GeoDB([("8.8.8.0", "8.8.8.255", "US")]))
+    client, db, _ = env
+    _store_alert(db, "b1", "8.8.8.8", "public", "admin")
+    _store_alert(db, "b2", "8.8.8.8", "public", "backup", ts="2026-11-17T10:00:40.000+0000")
+    inc_id = _incident(db, "brute_force|8.8.8.8@windows-host", "b1")
+    monkeypatch.setattr("soc.agent.store.recent_alerts",
+                        lambda conn, hours=24: conn.execute("SELECT * FROM alerts ORDER BY timestamp").fetchall())
+    page = client.get("/entity?type=ip&value=8.8.8.8").get_data(as_text=True)
+    assert "United States (US)" in page and inc_id in page and "2 stored alert(s)" in page
+    assert "/entity?type=user&amp;value=admin" in page and "/entity?type=user&amp;value=backup" in page
+    # and the incident page links into the pivot
+    assert "/entity?type=ip&amp;value=8.8.8.8" in client.get(f"/incident/{inc_id}").get_data(as_text=True)
+
+
+def test_entity_page_finds_old_incident_by_key_and_encodes_ipv6(env):
+    client, db, _ = env
+    inc_id = _incident(db, "brute_force|::1@windows-host", "never-stored")
+    page = client.get("/entity?type=ip&value=::1").get_data(as_text=True)
+    assert inc_id in page and "This computer (windows-host)" in page
+    # the link on the incident page round-trips (IPv6 colons survive URL encoding)
+    import html
+    href = re.search(r'href="(/entity\?type=ip[^"]+)"', client.get(f"/incident/{inc_id}").get_data(as_text=True)).group(1)
+    assert inc_id in client.get(html.unescape(href)).get_data(as_text=True)
+
+
+def test_entity_page_rejects_bad_input_and_escapes_value(env):
+    client, _, _ = env
+    assert client.get("/entity?type=bogus&value=x").status_code == 404
+    assert client.get("/entity?type=ip").status_code == 404
+    page = client.get("/entity", query_string={"type": "user", "value": XSS}).get_data(as_text=True)
+    assert XSS not in page and "&lt;script&gt;" in page

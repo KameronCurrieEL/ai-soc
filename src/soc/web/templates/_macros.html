@@ -1,0 +1,4 @@
+{# One place that builds entity links: url_for URL-encodes the value (IPv6 colons, backslashes, spaces). #}
+{% macro elink(etype, value) -%}
+<a class="elink" href="{{ url_for('entity', type=etype, value=value) }}" title="Pivot: everything about this value"><code>{{ value }}</code></a>
+{%- endmacro %}

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ inc['id'] }}{% endblock %}
 {% block content %}
+{% from "_macros.html" import elink %}
 <p><a href="{{ url_for('index') }}">&larr; queue</a></p>
 <section class="head">
   <div>
@@ -23,12 +24,12 @@
     <h2>Where</h2>
     <dl class="kv">
       <dt>Affected host</dt>
-      <dd>{% for h in hosts %}<code>{{ h }}</code>{% if not loop.last %}, {% endif %}{% else %}<span class="muted">unknown</span>{% endfor %}</dd>
+      <dd>{% for h in hosts %}{{ elink('host', h) }}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">unknown</span>{% endfor %}</dd>
     </dl>
     <h3>Came from</h3>
     {% for loc in locations %}
     <div class="loc">
-      <div class="loc-head"><strong>{{ loc.place }}</strong> <code class="target">{{ loc.ip }}</code>
+      <div class="loc-head"><strong>{{ loc.place }}</strong> {{ elink('ip', loc.ip) }}
         <span class="scope sc-{{ loc.scope }}">{{ loc.scope }}</span></div>
       <p class="muted">{{ loc.explanation }}</p>
     </div>
@@ -41,7 +42,7 @@
     <dl class="kv">
       {% for etype, ents in involved.items() %}
       <dt>{{ ents[0].label }}</dt>
-      <dd>{% for e in ents %}<code>{{ e.value }}</code>{% if e.count > 1 %} <small class="muted">×{{ e.count }}</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
+      <dd>{% for e in ents %}{{ elink(etype, e.value) }}{% if e.count > 1 %} <small class="muted">×{{ e.count }}</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
       {% endfor %}
     </dl>
     {% else %}<p class="muted">No stored alert details.</p>{% endif %}
