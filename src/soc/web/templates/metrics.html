@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Detection quality{% endblock %}
+{% block content %}
+<section class="head">
+  <div>
+    <h1>Detection quality</h1>
+    <p class="muted">From the verdicts analysts record when closing incidents. A high false-positive rate means the
+      rule needs fixing; many <em>benign</em> verdicts mean it's right but needs an exception (e.g. an admin's scheduled task).</p>
+  </div>
+</section>
+<section class="tiles">
+  <div class="tile"><strong>{{ totals.open }}</strong><small>open</small></div>
+  <div class="tile"><strong>{{ totals.closed }}</strong><small>closed</small></div>
+  <div class="tile"><strong>{{ '%.0f%%' % (totals.fp_rate * 100) if totals.fp_rate is not none else '–' }}</strong><small>false-positive rate</small></div>
+  <div class="tile"><strong>{{ '%.0f' % totals.median_close_minutes if totals.median_close_minutes is not none else '–' }}</strong><small>median min to close</small></div>
+</section>
+{% if stats %}
+<table class="list">
+  <thead><tr><th>Detection</th><th>Open</th><th>Closed</th><th>True pos.</th><th>Benign</th><th>False pos.</th><th>No verdict</th><th>FP rate</th><th>Median close</th></tr></thead>
+  <tbody>
+  {% for s in stats %}
+    <tr>
+      <td><code>{{ s.family }}</code></td><td>{{ s.open }}</td><td>{{ s.closed }}</td>
+      <td>{{ s.true_positive }}</td><td>{{ s.benign }}</td><td>{{ s.false_positive }}</td>
+      <td class="muted">{{ s.no_verdict }}</td>
+      <td>{{ '%.0f%%' % (s.fp_rate * 100) if s.fp_rate is not none else '–' }}</td>
+      <td>{{ '%.0f min' % s.median_close_minutes if s.median_close_minutes is not none else '–' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted">FP rate = false positives ÷ incidents with a verdict. "No verdict" = closed before verdicts were required.
+  Time to close runs from when the pipeline opened the incident to when an analyst closed it.</p>
+{% else %}<p class="empty">No incidents yet.</p>{% endif %}
+{% endblock %}

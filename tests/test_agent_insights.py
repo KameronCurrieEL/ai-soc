@@ -98,3 +98,19 @@ def test_pivot_falls_back_to_incident_key_when_alerts_not_stored():
 
 def test_pivot_unknown_type_matches_nothing():
     assert pivot("bogus", "x", [row(1, T.format(3))], []).alerts == []
+
+
+def test_verdict_stats_fp_rate_and_time_to_close():
+    from soc.agent.insights import verdict_stats
+
+    def inc(key, status, verdict=None, minutes=0):
+        return {"key": key, "status": status, "verdict": verdict, "verdict_at": None,
+                "created_at": "2026-11-17T20:00:00+00:00",
+                "updated_at": f"2026-11-17T20:{minutes:02d}:00+00:00"}
+    rows = [inc("brute_force|a@h", "closed", "false_positive", 10), inc("brute_force|b@h", "closed", "benign", 20),
+            inc("brute_force|c@h", "closed", "true_positive", 40), inc("brute_force|d@h", "closed", "false_positive", 30),
+            inc("new_service|x@h", "open"), inc("new_service|y@h", "closed", None, 4)]
+    bf, ns = verdict_stats(rows)
+    assert (bf.family, bf.closed, bf.judged, bf.fp_rate) == ("brute_force", 4, 4, 0.5)   # benign is not an FP
+    assert bf.median_close_minutes == 25
+    assert (ns.open, ns.no_verdict, ns.fp_rate) == (1, 1, None)

@@ -200,3 +200,14 @@ def test_index_shows_activity_chart_without_inline_styles(env):
     page = client.get("/").get_data(as_text=True)
     assert "Alerts, last 24 hours" in page and 'class="seg-high"' in page and "1 alert (1 high)" in page
     assert "style=" not in page            # CSP default-src 'self' would block inline styles
+
+
+def test_metrics_page_counts_verdicts(env):
+    client, db, inc_id = env
+    t = token(client)
+    for p in get_proposals(connect(db), inc_id):
+        client.post(f"/proposal/{p['id']}/reject", data={"by": "kameron", "reason": "lab", "csrf_token": t})
+    client.post(f"/incident/{inc_id}/close", data={"by": "kameron", "note": "rule fired on my test",
+                                                   "verdict": "false_positive", "csrf_token": t})
+    page = client.get("/metrics").get_data(as_text=True)
+    assert "Detection quality" in page and "100%" in page and "<code>k</code>" in page

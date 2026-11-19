@@ -158,6 +158,16 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
                                counts=counts, timeline=insights.timeline(p.alerts, []),
                                retention_days=store.ALERT_RETENTION_DAYS, geo_attribution=geoip.ATTRIBUTION)
 
+    @app.get("/metrics")
+    def metrics():
+        stats = insights.verdict_stats(store.list_incidents(db(), None))
+        totals = insights.FamilyStats("all")
+        for s in stats:
+            for f in ("open", "closed", "true_positive", "benign", "false_positive", "no_verdict"):
+                setattr(totals, f, getattr(totals, f) + getattr(s, f))
+            totals.close_minutes += s.close_minutes
+        return render_template("metrics.html", stats=stats, totals=totals)
+
     @app.get("/audit")
     def audit_view():
         return render_template("audit.html", entries=store.audit_entries(db(), limit=300))

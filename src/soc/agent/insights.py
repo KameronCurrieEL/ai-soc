@@ -248,3 +248,58 @@ def activity(alert_rows: list, hours: int = 24, now: datetime | None = None) -> 
         if 0 <= idx < hours:
             buckets[idx].counts[r["priority"]] = buckets[idx].counts.get(r["priority"], 0) + 1
     return buckets
+
+
+# ---------- detection quality (verdicts) ----------
+
+@dataclass
+class FamilyStats:
+    family: str                 # rule family from the incident key, e.g. brute_force
+    open: int = 0
+    closed: int = 0
+    true_positive: int = 0
+    benign: int = 0
+    false_positive: int = 0
+    no_verdict: int = 0         # closed before verdicts existed
+    close_minutes: list[float] = field(default_factory=list)
+
+    @property
+    def judged(self) -> int:
+        return self.true_positive + self.benign + self.false_positive
+
+    @property
+    def fp_rate(self) -> float | None:
+        """Share of judged incidents where the detection was wrong. None until something is judged."""
+        return self.false_positive / self.judged if self.judged else None
+
+    @property
+    def median_close_minutes(self) -> float | None:
+        m = sorted(self.close_minutes)
+        if not m:
+            return None
+        mid = len(m) // 2
+        return m[mid] if len(m) % 2 else (m[mid - 1] + m[mid]) / 2
+
+
+def verdict_stats(incidents: list) -> list[FamilyStats]:
+    """Per detection family: verdict counts, false-positive rate, median time from opened to closed.
+
+    Benign is NOT a false positive: the detection was right (it was real activity), it just
+    wasn't malicious. That difference tells you whether to fix the rule or add an exception.
+    """
+    stats: dict[str, FamilyStats] = {}
+    for inc in incidents:
+        family = inc["key"].split("|", 1)[0]
+        s = stats.setdefault(family, FamilyStats(family))
+        if inc["status"] != "closed":
+            s.open += 1
+            continue
+        s.closed += 1
+        verdict = inc["verdict"]
+        if verdict in ("true_positive", "benign", "false_positive"):
+            setattr(s, verdict, getattr(s, verdict) + 1)
+        else:
+            s.no_verdict += 1
+        closed_at = inc["verdict_at"] or inc["updated_at"]
+        s.close_minutes.append((parse_any_time(closed_at) - parse_any_time(inc["created_at"])).total_seconds() / 60)
+    return sorted(stats.values(), key=lambda s: (-(s.fp_rate or 0), -(s.open + s.closed), s.family))
