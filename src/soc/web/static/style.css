@@ -331,3 +331,17 @@ svg.bars { width: 100%; height: auto; display: block; margin-top: 10px; }
   .ov-grid, .ov-grid-3 { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- live alert feed ---------- */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.filters input[name="q"] { flex: 1; min-width: 180px; max-width: 360px; }
+.live-status { font: 600 12px var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 2px 9px; }
+.live-status.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.live-status.on::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+                          margin-right: 6px; vertical-align: middle; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+table.feed td { font-size: 13px; }
+table.feed .desc { color: var(--text-2); max-width: 420px; }
+table.feed tr.row-new { animation: flash-in 2.5s ease-out; }
+@keyframes flash-in { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .live-status.on::before, table.feed tr.row-new { animation: none; } }

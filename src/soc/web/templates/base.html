@@ -6,6 +6,7 @@
   <title>{% block title %}Queue{% endblock %} · AI-SOC Console</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='assistant.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='live.js') }}" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -19,6 +20,8 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4zM13 20h7V4h-7zM4 20h7v-5H4z"/></svg>Overview</a>
       <a href="{{ url_for('index') }}" class="{{ 'active' if nav in ('index', 'incident', 'entity') }}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Incident queue</a>
+      <a href="{{ url_for('alerts_feed') }}" class="{{ 'active' if nav == 'alerts_feed' }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4l2-12 4 16 2-9h4"/></svg>Live alerts</a>
       <a href="{{ url_for('metrics') }}" class="{{ 'active' if nav == 'metrics' }}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Detection quality</a>
       <a href="{{ url_for('audit_view') }}" class="{{ 'active' if nav == 'audit_view' }}">

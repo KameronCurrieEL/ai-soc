@@ -170,6 +170,30 @@ def recent_alerts(conn: sqlite3.Connection, hours: int = 24) -> list[sqlite3.Row
     return conn.execute("SELECT * FROM alerts WHERE timestamp >= ? ORDER BY timestamp", (cutoff,)).fetchall()
 
 
+def latest_alerts(conn: sqlite3.Connection, limit: int = 100, priority: str | None = None,
+                  source: str | None = None, q: str | None = None) -> list[sqlite3.Row]:
+    """Newest alerts first, for the live feed. Optional filters: priority, source (sensor), free text.
+
+    Parameterized LIKE: `q` is only ever a bound value, never concatenated into SQL (injection-safe).
+    """
+    where, params = ["1=1"], []
+    if priority in ("low", "medium", "high", "critical"):
+        where.append("priority = ?"); params.append(priority)
+    if source:
+        where.append("source = ?"); params.append(source)
+    if q and q.strip():
+        where.append("(description LIKE ? OR user LIKE ? OR src_ip LIKE ? OR agent_name LIKE ? OR rule_id LIKE ?)")
+        params += [f"%{q.strip()}%"] * 5
+    params.append(max(1, min(limit, 500)))
+    return conn.execute(f"SELECT * FROM alerts WHERE {' AND '.join(where)} "
+                        f"ORDER BY timestamp DESC, rowid DESC LIMIT ?", params).fetchall()
+
+
+def alert_sources(conn: sqlite3.Connection) -> list[str]:
+    """Distinct alert sources (sensors) seen, for the feed's filter dropdown."""
+    return [r["source"] for r in conn.execute("SELECT DISTINCT source FROM alerts ORDER BY source")]
+
+
 def save_chat(conn: sqlite3.Connection, scope: str, role: str, actor: str, content: str,
               duration_s: float | None = None) -> None:
     with conn:

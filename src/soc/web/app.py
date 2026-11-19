@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import (Flask, Response, abort, flash, g, redirect, render_template, request, session,
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session,
                    stream_with_context, url_for)
 
 from soc.agent import approval, insights, store
@@ -192,6 +192,40 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
                                geo_attribution=geoip.ATTRIBUTION, chat_scope=inc_id,
                                chat=store.chat_history(conn, inc_id), suggestions=assistant.SUGGESTED_INCIDENT,
                                assessment=store.latest_assessment(conn, inc_id))
+
+    def feed_row(r: sqlite3.Row) -> dict:
+        """Compact, safe view of a stored alert for the live feed (JSON + template)."""
+        data = {}
+        try:
+            data = json.loads(r["data"])
+        except (ValueError, TypeError):
+            pass
+        return {"id": r["id"], "ts": r["timestamp"][:19].replace("T", " "), "priority": r["priority"],
+                "source": r["source"], "rule_id": r["rule_id"], "description": r["description"],
+                "agent": r["agent_name"], "user": r["user"] or "", "src_ip": r["src_ip"] or "",
+                "scope": data.get("src_ip_scope") or ""}
+
+    FEED_LIMIT = 100
+
+    @app.get("/alerts")
+    def alerts_feed():
+        conn = db()
+        prio = request.args.get("priority") or None
+        source = request.args.get("source") or None
+        q = request.args.get("q") or None
+        rows = store.latest_alerts(conn, FEED_LIMIT, priority=prio, source=source, q=q)
+        return render_template("alerts.html", alerts=[feed_row(r) for r in rows], sources=store.alert_sources(conn),
+                               sel_priority=prio or "", sel_source=source or "", q=q or "",
+                               total=conn.execute("SELECT COUNT(*) n FROM alerts").fetchone()["n"])
+
+    @app.get("/api/alerts.json")
+    def alerts_json():
+        """Polled by live.js for the auto-updating feed. Same filters as the page (query string)."""
+        conn = db()
+        rows = store.latest_alerts(conn, FEED_LIMIT, priority=request.args.get("priority") or None,
+                                   source=request.args.get("source") or None, q=request.args.get("q") or None)
+        return jsonify({"alerts": [feed_row(r) for r in rows],
+                        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds")})
 
     @app.get("/entity")
     def entity():

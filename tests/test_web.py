@@ -392,3 +392,42 @@ def test_queue_moved_to_its_own_route(env):
     client, _, _ = env
     assert client.get("/queue").status_code == 200
     assert "AI assistant" in client.get("/queue").get_data(as_text=True)   # assistant lives on the queue page
+
+
+# ---------- live alert feed (step B1) ----------
+
+def test_alert_feed_page_and_json_api(env):
+    client, db, _ = env
+    from datetime import datetime, timedelta, timezone
+    from soc.agent.store import wazuh_ts
+    now = datetime.now(timezone.utc)
+    _store_alert(db, "f1", "8.8.8.8", "public", "admin", ts=wazuh_ts(now - timedelta(minutes=2)))
+    _store_alert(db, "f2", "::1", "loopback", "soc-test-user", ts=wazuh_ts(now - timedelta(minutes=1)))
+    page = client.get("/alerts").get_data(as_text=True)
+    assert "Live alerts" in page and 'id="feed-body"' in page and 'src="/static/live.js"' in page
+    assert "8.8.8.8" in page and "soc-test-user" in page
+    data = client.get("/api/alerts.json").get_json()
+    assert "generated" in data and len(data["alerts"]) == 2
+    assert data["alerts"][0]["id"] == "f2"            # newest first
+    assert {"id", "ts", "priority", "rule_id", "src_ip", "scope"} <= set(data["alerts"][0])
+
+
+def test_feed_filters_are_injection_safe_and_work(env):
+    client, db, _ = env
+    _store_alert(db, "g1", "8.8.8.8", "public", "admin")
+    _store_alert(db, "g2", "::1", "loopback", "bob")
+    # priority filter
+    hi = client.get("/api/alerts.json?priority=high").get_json()["alerts"]
+    assert hi and all(a["priority"] == "high" for a in hi)
+    # text search (parameterized LIKE): a SQLi-looking string just matches nothing, never errors
+    assert client.get("/api/alerts.json", query_string={"q": "'; DROP TABLE alerts;--"}).get_json()["alerts"] == []
+    from soc.agent.store import connect as _c
+    assert _c(db).execute("SELECT COUNT(*) n FROM alerts").fetchone()["n"] == 2   # table intact
+    assert len(client.get("/api/alerts.json", query_string={"q": "bob"}).get_json()["alerts"]) == 1
+
+
+def test_feed_api_escapes_in_page_not_in_json(env):
+    client, db, _ = env
+    _store_alert(db, "x1", "8.8.8.8", "public", XSS)
+    assert XSS not in client.get("/alerts").get_data(as_text=True)      # HTML page autoescapes
+    assert XSS in client.get("/api/alerts.json").get_json()["alerts"][0]["user"]   # JSON carries raw; JS uses textContent

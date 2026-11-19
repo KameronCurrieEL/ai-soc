@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Live alerts{% endblock %}
+{% block crumbs %}<strong>Live alerts</strong>{% endblock %}
+{% block content %}
+{% from "_macros.html" import elink %}
+<section class="page-head">
+  <div>
+    <h1>Live alerts</h1>
+    <p class="meta">{{ total }} alerts stored (7-day retention) · newest first
+      · <span id="live-status" class="live-status" data-endpoint="{{ url_for('alerts_json') }}">live: off</span></p>
+  </div>
+</section>
+
+<form class="filters" method="get" action="{{ url_for('alerts_feed') }}">
+  <select name="priority" aria-label="Priority">
+    <option value="">all priorities</option>
+    {% for p in ['critical', 'high', 'medium', 'low'] %}<option value="{{ p }}" {{ 'selected' if sel_priority == p }}>{{ p }}</option>{% endfor %}
+  </select>
+  <select name="source" aria-label="Source">
+    <option value="">all sources</option>
+    {% for s in sources %}<option value="{{ s }}" {{ 'selected' if sel_source == s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <input name="q" value="{{ q }}" placeholder="search user, IP, rule, text…" maxlength="80" aria-label="Search">
+  <button class="btn" type="submit">Filter</button>
+  {% if sel_priority or sel_source or q %}<a class="btn" href="{{ url_for('alerts_feed') }}">Clear</a>{% endif %}
+</form>
+
+<div class="table-wrap">
+<table class="list feed">
+  <thead><tr><th>Time (UTC)</th><th>Sev</th><th>Rule</th><th>Host</th><th>Account</th><th>Source IP</th><th>Description</th></tr></thead>
+  <tbody id="feed-body" data-endpoint="{{ url_for('alerts_json') }}">
+  {% for a in alerts %}
+    <tr data-id="{{ a.id }}">
+      <td class="mono">{{ a.ts }}</td>
+      <td><span class="badge b-{{ a.priority }}">{{ a.priority }}</span></td>
+      <td class="mono">{{ a.rule_id }}</td>
+      <td>{{ elink('host', a.agent) }}</td>
+      <td>{% if a.user %}{{ elink('user', a.user) }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if a.src_ip %}{{ elink('ip', a.src_ip) }}{% if a.scope %} <span class="scope sc-{{ a.scope }}">{{ a.scope }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="desc">{{ a.description }}</td>
+    </tr>
+  {% else %}
+    <tr class="feed-empty"><td colspan="7" class="muted">No alerts match. Run the pipeline (Refresh from Wazuh) to load alerts.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
