@@ -49,6 +49,7 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - /metrics: per detection family FP rate + median time to close.
   - Live: 1001 alerts stored over 72h; both Nov 17 incidents now show summary + entities.
 - Phase 8 Portfolio: DONE 2026-11-19 except screenshots. README (Mermaid architecture, results, security design, quickstart, limitations), docs/writeups/ (prompt injection, brute-force correlation), docs/resume.md, docs/DEMO.md (9 test scenarios + troubleshooting; security commands verified live). Pre-publish scan: no secrets/hostnames/public IPs in files or history.
+  - Published 2026-11-19: https://github.com/veliwrld/ai-soc (public). Commits use the GitHub noreply email (history rewritten before first push); WSL pushes via SSH key ~/.ssh/id_ed25519.
 - Phase 9 Honeypot + ESP32 (LilyGO T-Embed CC1101): planned.
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
