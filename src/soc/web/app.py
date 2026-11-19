@@ -28,7 +28,7 @@ from flask import (Flask, Response, abort, flash, g, redirect, render_template, 
                    stream_with_context, url_for)
 
 from soc.agent import approval, insights, store
-from soc.ai import assistant
+from soc.ai import assistant, responder
 from soc.enrich import geoip
 from soc.web import charts
 from soc.parsing.schema import ip_scope
@@ -45,11 +45,13 @@ SECURITY_HEADERS = {
 }
 
 
-def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_factory=None, ai_status=None) -> Flask:
+def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_factory=None, ai_status=None,
+               responder_factory=None) -> Flask:
     """Injectable for tests (no Wazuh or Ollama needed):
-    pipeline_runner(conn) -> RunStats; llm_factory() -> object with .name and .stream(messages);
-    ai_status() -> (ok: bool, label: str) for the header pill."""
+    pipeline_runner(conn) -> RunStats; llm_factory() -> chat model with .name and .stream(messages);
+    responder_factory() -> model with .name and .complete(system, user, schema); ai_status() -> (ok, label)."""
     llm_factory = llm_factory or _assistant_llm
+    responder_factory = responder_factory or _responder_llm
     ai_status = ai_status or _cached_ai_status()
     app = Flask(__name__)
     app.config.update(
@@ -81,7 +83,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def inject() -> dict:
         ok, label = ai_status()
         return {"csrf_token": csrf_token(), "analyst": session.get("analyst", ""), "ai_ok": ok, "ai_label": label,
-                "nav": request.endpoint}
+                "nav": request.endpoint, "autopilot": store.get_setting(db(), "autopilot", "off") == "on"}
 
     @app.before_request
     def security_checks() -> None:
@@ -128,10 +130,14 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         hosts, ips = insights.hosts_and_ips(r, alert_rows)
         # Loading the GeoIP database takes seconds: only do it when there is a public IP to look up.
         geo_db = geoip.default_db() if any(ip_scope(ip) == "public" for ip in ips) else None
+        involved = {k: v for k, v in insights.entities(alert_rows).items() if k not in ("host", "ip")}
+        targets = set(hosts) | set(ips) | {p["row"]["target"] for p in proposals}
+        for ents in involved.values():
+            targets |= {e.value for e in ents}
         return {"inc": r, "proposals": proposals, "audit": audit_rows, "hosts": hosts,
                 "summary": insights.plain_summary(r, alert_rows) if alert_rows else None,
                 "locations": [geoip.locate(ip, hosts[0] if hosts else None, geo_db) for ip in ips],
-                "involved": {k: v for k, v in insights.entities(alert_rows).items() if k not in ("host", "ip")},
+                "involved": involved, "allowed_targets": {t for t in targets if t},
                 "timeline": insights.timeline(alert_rows, audit_rows)}
 
     # ---------- pages ----------
@@ -149,9 +155,12 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         r = store.get_incident(conn, inc_id)
         if r is None:
             abort(404)
-        return render_template("incident.html", **incident_view(conn, r), verdicts=approval.VERDICTS,
+        view = incident_view(conn, r)
+        view.pop("allowed_targets", None)   # internal, not for the template
+        return render_template("incident.html", **view, verdicts=approval.VERDICTS,
                                geo_attribution=geoip.ATTRIBUTION, chat_scope=inc_id,
-                               chat=store.chat_history(conn, inc_id), suggestions=assistant.SUGGESTED_INCIDENT)
+                               chat=store.chat_history(conn, inc_id), suggestions=assistant.SUGGESTED_INCIDENT,
+                               assessment=store.latest_assessment(conn, inc_id))
 
     @app.get("/entity")
     def entity():
@@ -230,6 +239,49 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
                                            request.form.get("verdict", "")), f"{inc_id} closed")
         return redirect(url_for("incident", inc_id=inc_id))
 
+    @app.post("/incident/<inc_id>/respond")
+    def respond(inc_id: str):
+        """Run the responder agent: store its assessment and add its (vetted) suggested proposals.
+        It never approves or executes; its proposals still need you."""
+        conn = db()
+        r = store.get_incident(conn, inc_id)
+        if r is None:
+            abort(404)
+        v = incident_view(conn, r)
+        family = r["key"].split("|", 1)[0]
+        context = assistant.incident_context(r, summary=v["summary"], hosts=v["hosts"], locations=v["locations"],
+                                             involved=v["involved"], proposals=v["proposals"], timeline=v["timeline"])
+        try:
+            result = responder.respond(responder_factory(), family, context)
+        except Exception as exc:  # Ollama down / model missing
+            flash(f"Responder unavailable: {exc}", "error")
+            return redirect(url_for("incident", inc_id=inc_id) + "#agent")
+        if not result.assessment:
+            flash("Responder returned no valid answer: " + "; ".join(result.errors[:2]), "error")
+            return redirect(url_for("incident", inc_id=inc_id) + "#agent")
+        a = result.assessment
+        store.save_assessment(conn, inc_id, result.model, a.assessment, a.confidence,
+                              a.attacker_next_steps, result.skills_used, result.duration_s)
+        proposals, rejected = responder.actions_to_proposals(a, v["allowed_targets"])
+        added = store.add_agent_proposals(conn, inc_id, proposals)
+        msg = f"Responder assessed this incident ({a.confidence} confidence); {added} action(s) suggested for your approval."
+        if rejected:
+            msg += f" {len(rejected)} suggestion(s) blocked by safety checks."
+        flash(msg, "ok")
+        return redirect(url_for("incident", inc_id=inc_id) + "#agent")
+
+    @app.post("/autopilot")
+    def autopilot_toggle():
+        want = "on" if request.form.get("enabled") == "on" else "off"
+        conn = db()
+        store.set_setting(conn, "autopilot", want)
+        with conn:
+            store.audit(conn, remember_analyst() or "analyst", "autopilot_" + ("enabled" if want == "on" else "disabled"))
+        flash(f"Autopilot {'ENABLED' if want == 'on' else 'disabled'}. "
+              + ("Rule-critical incidents will be auto-contained (dry-run) on the next run." if want == "on"
+                 else "Nothing acts without your approval."), "ok" if want == "off" else "error")
+        return redirect(request.form.get("back") or url_for("index"))
+
     # ---------- assistant (advice only: no route here changes incidents or proposals) ----------
 
     @app.post("/assistant/<scope>/ask")
@@ -297,6 +349,18 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         return redirect(url_for("index"))
 
     return app
+
+
+def _responder_llm():
+    """Agent brain: JSON output, a bit of headroom. OLLAMA_AGENT_MODEL overrides the default model."""
+    from soc.ai.llm import llm_from_env
+    from soc.checks import load_env
+    env = load_env()
+    if env.get("OLLAMA_AGENT_MODEL"):
+        env = {**env, "OLLAMA_MODEL": env["OLLAMA_AGENT_MODEL"]}
+    llm = llm_from_env(env)
+    llm.temperature, llm.max_tokens, llm.timeout_s = 0.1, 600, 300.0
+    return llm
 
 
 def _assistant_llm():

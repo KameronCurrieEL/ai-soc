@@ -76,6 +76,38 @@
   </section>
 </div>
 
+<section class="card agent" id="agent">
+  <div class="as-head">
+    <h2><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2a5 5 0 0 1 5 5v1a4 4 0 0 1 2 3.5V15a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5v-3.5A4 4 0 0 1 7 8V7a5 5 0 0 1 5-5Z"/><path d="M9 13h.01M15 13h.01"/></svg>
+      Red-team responder <small>offensive knowledge, defensive actions · advisory</small></h2>
+    <form method="post" action="{{ url_for('respond', inc_id=inc['id']) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="by" value="{{ analyst }}">
+      <button class="btn btn-primary" type="submit" {{ 'disabled' if not ai_ok }}>{{ 'Re-run responder' if assessment else 'Run AI responder' }}</button>
+    </form>
+  </div>
+  {% if assessment %}
+  {% set steps = assessment['next_steps'] | fromjson %}
+  {% set skills = assessment['skills_used'] | fromjson %}
+  <p class="agent-assess"><span class="tag tag-attn">{{ assessment['confidence'] }} confidence</span> {{ assessment['assessment'] }}</p>
+  {% if steps %}
+  <h3>If I were the attacker, next…</h3>
+  <ul class="next-steps">
+    {% for s in steps %}
+    <li><strong>{{ s['step'] }}</strong>{% if s['technique'] %} <span class="tag">{{ s['technique'] }}</span>{% endif %}
+      <div class="watch">Watch for: {{ s['watch_for'] }}</div></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p class="muted agent-meta">Suggested actions appear below, marked <span class="src-agent">AI</span>; approve them like any other.
+    {% if skills %}· tradecraft used: {{ skills | join(', ') }}{% endif %}
+    · {{ assessment['model'] }} · {{ assessment['at'][11:16] }} UTC{% if assessment['duration_s'] %} · {{ '%.0f' % assessment['duration_s'] }}s{% endif %}</p>
+  {% else %}
+  <p class="muted">The responder reads this incident's facts, thinks through the attacker's likely next moves with red-team
+    knowledge, and suggests defensive actions for you to approve. It can't approve or run anything itself.</p>
+  {% endif %}
+</section>
+
 <h2 class="section-title">Response actions <small>targets come from attacker-controllable log data: shown as text, validated before any command is built</small></h2>
 {% for item in proposals %}{% set p = item.row %}
 <section class="card proposal st-{{ p['status'] }}">
@@ -85,8 +117,9 @@
     <code class="target">{{ p['target'] }}</code>
     <span class="badge b-{{ p['priority'] }}">{{ p['priority'] }}</span>
     <span class="status s-{{ p['status'] }}">{{ p['status'] }}</span>
+    {% if p['source'] == 'agent' %}<span class="src-agent" title="suggested by the AI responder">AI</span>{% endif %}
   </div>
-  <p class="prop-reason">{{ p['reason'] }} <small class="muted">rule: {{ p['rule'] }}</small></p>
+  <p class="prop-reason">{{ p['reason'] }} <small class="muted">{{ p['source'] }}: {{ p['rule'] }}</small></p>
   {% if item.error %}
     <p class="veto">Cannot be approved: {{ item.error }}</p>
   {% elif item.plan.command %}

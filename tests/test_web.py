@@ -22,6 +22,21 @@ class FakeLLM:
         yield from FakeLLM.answer
 
 
+class FakeResponder:
+    """Stands in for the agent brain: returns a fixed JSON assessment + suggested actions."""
+    name = "fake-responder"
+    reply = None  # set per test
+
+    def complete(self, system, user, schema=None):
+        import json as _json
+        return FakeResponder.reply or _json.dumps({
+            "assessment": "Looks like a real brute force.", "confidence": "high",
+            "attacker_next_steps": [{"technique": "T1110", "step": "keep trying", "watch_for": "a 4624 success"}],
+            "actions": [{"action": "block_ip", "target": "8.8.8.8", "urgency": "immediate", "reason": "public source"},
+                        {"action": "isolate_host", "target": "windows-host", "urgency": "soon", "reason": "contain"}],
+        })
+
+
 @pytest.fixture
 def env(tmp_path):
     db = tmp_path / "soc.db"
@@ -32,7 +47,8 @@ def env(tmp_path):
     save_incidents(conn, [inc])
     conn.close()
     app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}),
-                     llm_factory=FakeLLM, ai_status=lambda: (True, "fake-model online"))
+                     llm_factory=FakeLLM, responder_factory=FakeResponder,
+                     ai_status=lambda: (True, "fake-model online"))
     app.config["TESTING"] = True
     return app.test_client(), db, inc.id
 
@@ -300,3 +316,58 @@ def test_pages_show_ai_status_and_load_only_same_origin_script(env):
     page = client.get("/").get_data(as_text=True)
     assert "fake-model online" in page and 'src="/static/assistant.js"' in page
     assert "<script>" not in page and "style=" not in page        # no inline script/style: CSP stays strict
+
+
+# ---------- responder agent + autopilot ----------
+
+def _public_incident(db):
+    inc = Incident("brute_force|8.8.8.8@windows-host", "Brute force from 8.8.8.8", "high",
+                   "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000", ["a1"],
+                   [Proposal("block_ip", "8.8.8.8", "high", "brute_force", "public brute force")], [], [])
+    save_incidents(connect(db), [inc])
+    return inc.id
+
+
+def test_responder_adds_vetted_proposals_and_stores_assessment(env):
+    client, db, _ = env
+    inc_id = _public_incident(db)
+    t = token(client, f"/incident/{inc_id}")
+    r = client.post(f"/incident/{inc_id}/respond", data={"by": "kameron", "csrf_token": t}, follow_redirects=True)
+    page = r.get_data(as_text=True)
+    assert "Looks like a real brute force." in page and "keep trying" in page and "a 4624 success" in page
+    # the AI's block_ip (8.8.8.8 is in the incident) became an agent proposal, source=agent
+    agent = [p for p in get_proposals(connect(db), inc_id) if p["source"] == "agent"]
+    # block_ip 8.8.8.8 already exists as a RULE proposal (deduped); the new isolate_host is added as agent
+    assert any(p["action"] == "isolate_host" and p["target"] == "windows-host" for p in agent)
+    # asking the responder is logged, but it approved/executed nothing
+    events = [(e["actor"], e["event"]) for e in audit_entries(connect(db))]
+    assert ("ai_responder", "agent_assessed") in events
+    assert not any(ev in ("proposal_approved", "proposal_executed") for _, ev in events)
+
+
+def test_responder_blocks_invented_and_unsafe_targets(env):
+    import json as _json
+    client, db, _ = env
+    inc_id = _public_incident(db)
+    FakeResponder.reply = _json.dumps({
+        "assessment": "x", "confidence": "low", "attacker_next_steps": [],
+        "actions": [{"action": "block_ip", "target": "203.0.113.200", "urgency": "soon", "reason": "not in incident"},
+                    {"action": "disable_account", "target": "administrator", "urgency": "soon", "reason": "protected"}]})
+    t = token(client, f"/incident/{inc_id}")
+    client.post(f"/incident/{inc_id}/respond", data={"by": "kameron", "csrf_token": t})
+    FakeResponder.reply = None
+    assert [p for p in get_proposals(connect(db), inc_id) if p["source"] == "agent"] == []  # both rejected
+
+
+def test_autopilot_toggle_persists_and_is_audited(env):
+    client, db, _ = env
+    t = token(client)
+    assert "Autopilot off" in client.get("/").get_data(as_text=True)
+    client.post("/autopilot", data={"enabled": "on", "by": "kameron", "csrf_token": t})
+    from soc.agent.store import get_setting
+    assert get_setting(connect(db), "autopilot") == "on"
+    page = client.get("/").get_data(as_text=True)
+    assert "Autopilot is ON" in page and "Autopilot ON" in page
+    assert ("kameron", "autopilot_enabled") in [(e["actor"], e["event"]) for e in audit_entries(connect(db))]
+    client.post("/autopilot", data={"enabled": "off", "by": "kameron", "csrf_token": t})
+    assert get_setting(connect(db), "autopilot") == "off"

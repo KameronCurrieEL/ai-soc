@@ -101,3 +101,24 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 - The console is no longer 100% JS-free. The script is small, reviewed, and optional.
 - Answers are only as good as a 3B model: useful for explaining and checklists, not for verdicts, which stay with the rules and the human.
 - Ollama status is checked at most every 30 s for the header pill.
+
+---
+
+## D6 (2026-11-19): Responder agent with red-team knowledge + bounded autopilot
+
+**Context.** The owner wants an agent that reads an incident, suggests response actions to approve, and — for a "red"-level situation while they're away from the dashboard — can act on its own. This changes the original hard rule "nothing runs without explicit human approval." The owner authorized the change (CLAUDE.md updated; rules may change as the project evolves and are recorded here).
+
+**Decision.**
+1. **Responder agent** (`src/soc/ai/responder.py`): on demand per incident, a local model reads the incident facts, predicts the attacker's likely next moves, and SUGGESTS actions. Suggestions become proposals (`source='agent'`) that the human approves like any other. The agent has no tools and cannot approve, execute or close.
+2. **Red-team knowledge** (`src/soc/ai/redteam/`): 79 offensive-security skills vendored from snailsploit/claude-red (MIT). Only the ones relevant to an incident are injected (category + keyword match). They inform `attacker_next_steps` (what to watch for), never executable attack steps. The agent's actions stay the four defensive ones.
+3. **Autopilot** (`approval.run_autopilot`, off by default, toggle in the UI): when ON, proposals that are `source='rule'` AND `priority='critical'` AND system-changing are approved+executed automatically as actor `autopilot`, and the incident is flagged for review.
+
+**Why these bounds.**
+- **Autopilot triggers on RULES only, never the AI.** The Phase 5 eval showed this model can be talked into a wrong severity by attacker-controlled log text. If the AI could trigger autopilot, a crafted username could cause an autonomous action. Rule-critical only (e.g. `success_after_brute_force`) keeps the trigger deterministic and testable.
+- **Still dry-run.** Autopilot records the command + rollback in the audit log; it changes nothing on the host. This matches "simulate if something happened while I was away."
+- **Agent suggestions pass the same gates as rules.** Target must be an entity in the incident (no invented targets), then `validate_target` (injection/format), then the safety guards (never block ourselves, never disable protected accounts). A hijacked model cannot produce a dangerous proposal.
+- **Output is validated JSON** (`RESPONSE_SCHEMA`), one retry then a logged failure — same contract as the analyst.
+
+**Model.** A bake-off (`make eval` across candidates) compares qwen2.5:3b, qwen2.5:7b and Cisco Foundation-Sec-8B-Instruct; `OLLAMA_AGENT_MODEL` selects the agent's model independently of the triage model.
+
+**Consequences.** The console now runs autonomous actions in one narrow, audited, dry-run path. The red-team skills are offensive content (vendored, MIT, attributed) living in a defensive repo; the README explains the defensive-only use. If live execution is ever enabled, autopilot would need a hard allowlist and rate limit first.

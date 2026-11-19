@@ -274,3 +274,24 @@ svg.bars { width: 100%; height: auto; display: block; margin-top: 10px; }
   .timeline li { grid-template-columns: 1fr; gap: 2px; }
   .list th:nth-child(3), .list td:nth-child(3), .list th:nth-child(5), .list td:nth-child(5) { display: none; }
 }
+
+/* ---------- autopilot + responder agent ---------- */
+.autopilot-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ap-btn { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 10px; border-radius: 999px;
+          border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text-2); }
+.ap-btn.on { color: var(--no); border-color: color-mix(in srgb, var(--no) 55%, transparent);
+             background: color-mix(in srgb, var(--no) 14%, transparent); }
+.ap-btn:hover { border-color: var(--accent); }
+.banner-autopilot { border: 1px solid color-mix(in srgb, var(--no) 55%, transparent); background: color-mix(in srgb, var(--no) 10%, transparent);
+                    color: var(--no); padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 16px; font-size: 13.5px; }
+.agent { border-left: 3px solid color-mix(in srgb, var(--no) 70%, var(--accent)); }
+.agent .as-head h2 svg { color: color-mix(in srgb, var(--no) 60%, var(--accent)); }
+.agent .as-head h2 svg path { fill: color-mix(in srgb, var(--no) 20%, transparent); }
+.agent-assess { font-size: 14.5px; line-height: 1.6; margin: 4px 0 0; }
+.next-steps { list-style: none; padding: 0; margin: 0; }
+.next-steps li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.next-steps li:last-child { border-bottom: 0; }
+.next-steps .watch { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.agent-meta { font-size: 12px; margin-top: 12px; }
+.src-agent { font: 600 10px var(--sans); letter-spacing: .04em; color: color-mix(in srgb, var(--no) 60%, var(--accent));
+             border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px; }

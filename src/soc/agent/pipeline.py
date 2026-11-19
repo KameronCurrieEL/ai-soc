@@ -9,7 +9,8 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from soc.agent.incidents import group_incidents
-from soc.agent.store import audit, save_alerts, save_incidents
+from soc.agent.approval import run_autopilot
+from soc.agent.store import audit, get_setting, save_alerts, save_incidents
 from soc.decision.engine import decide_batch, hardening_backlog
 from soc.parsing.normalize import normalize
 from soc.parsing.schema import Alert
@@ -27,6 +28,7 @@ class RunStats:
     incidents: int = 0
     saved: dict = field(default_factory=dict)
     backlog_checks: int = 0
+    autopilot_actions: int = 0
 
 
 def fetch_alerts(env: dict[str, str], last: str) -> list[Alert]:
@@ -64,7 +66,9 @@ def run_pipeline(conn: sqlite3.Connection, alerts: list[Alert], analyst=None,
     stats.incidents = len(incidents)
     stats.saved = save_incidents(conn, incidents)
     stats.backlog_checks = sum(len(v) for v in hardening_backlog(alerts).values())
+    if get_setting(conn, "autopilot", "off") == "on":   # D6: auto-contain rule-critical incidents (dry-run)
+        stats.autopilot_actions = len(run_autopilot(conn, dry_run=True))
     with conn:
         audit(conn, "pipeline", "pipeline_run", alerts=stats.alerts, ai_calls=stats.ai_calls,
-              incidents=stats.incidents, **stats.saved)
+              incidents=stats.incidents, autopilot_actions=stats.autopilot_actions, **stats.saved)
     return stats

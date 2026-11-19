@@ -12,9 +12,11 @@ from __future__ import annotations
 import sqlite3
 
 from soc.agent.store import audit, get_proposal, now
+from soc.decision.models import CHANGES_SYSTEM
 from soc.response.actions import InvalidTarget, execute, plan
 
 PIPELINE_ACTOR = "pipeline"
+AUTOPILOT_ACTOR = "autopilot"
 
 # Standard SOC dispositions. Recorded at close; they measure how good the detections are.
 VERDICTS = {
@@ -106,3 +108,45 @@ def close_incident(conn: sqlite3.Connection, incident_id: str, actor: str, note:
         if cur.rowcount != 1:
             raise ApprovalError(f"incident {incident_id} not found or already closed")
         audit(conn, actor, "incident_closed", incident_id, verdict=verdict, note=note)
+
+
+def run_autopilot(conn: sqlite3.Connection, dry_run: bool = True) -> list[dict]:
+    """Act without a human on RULE-critical containment only (CLAUDE.md D6).
+
+    Scope, deliberately narrow so a hijacked AI can never trigger this:
+      - source = 'rule'  (AI-suggested proposals never qualify, even if the AI rated them critical)
+      - priority = 'critical'  (set by the deterministic rule, e.g. success_after_brute_force)
+      - action changes the system (block_ip / disable_account / isolate_host); 'investigate' is left for a human
+      - status still 'proposed', and the target still passes validation
+    Each action is approved + executed (dry-run) as actor 'autopilot', every step audited, and the
+    incident is flagged 'autopilot_engaged' so the human reviews it. Returns the acted proposals.
+    """
+    rows = conn.execute(
+        "SELECT p.* FROM proposals p JOIN incidents i ON i.id = p.incident_id "
+        "WHERE p.status = 'proposed' AND p.source = 'rule' AND p.priority = 'critical' AND i.status = 'open'"
+    ).fetchall()
+    acted, flagged = [], set()
+    for row in rows:
+        if row["action"] not in CHANGES_SYSTEM:
+            continue
+        try:
+            p = plan(row["action"], row["target"])
+        except InvalidTarget as exc:
+            with conn:
+                audit(conn, AUTOPILOT_ACTOR, "approval_refused", row["incident_id"], row["id"], error=str(exc))
+            continue
+        output = execute(p, dry_run=dry_run)
+        with conn:
+            if row["incident_id"] not in flagged:
+                audit(conn, AUTOPILOT_ACTOR, "autopilot_engaged", row["incident_id"],
+                      note="rule-critical incident handled automatically; review required")
+                flagged.add(row["incident_id"])
+            _transition(conn, row["id"], "proposed", "approved")
+            audit(conn, AUTOPILOT_ACTOR, "proposal_approved", row["incident_id"], row["id"],
+                  action=row["action"], target=row["target"], note="autopilot (rule-critical)")
+            _transition(conn, row["id"], "approved", "executed")
+            audit(conn, AUTOPILOT_ACTOR, "proposal_executed", row["incident_id"], row["id"], dry_run=dry_run,
+                  command=p.command, rollback=p.rollback, output=output)
+        acted.append({"proposal_id": row["id"], "incident_id": row["incident_id"],
+                      "action": row["action"], "target": row["target"], "output": output})
+    return acted

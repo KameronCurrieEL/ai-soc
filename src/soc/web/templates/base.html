@@ -23,8 +23,15 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg>Audit log</a>
     </nav>
     <div class="side-foot">
-      <span class="mode">DRY-RUN</span>
-      <p>Bound to 127.0.0.1. Every action needs a named approver and is written to an append-only audit log.</p>
+      <form class="autopilot-toggle" method="post" action="{{ url_for('autopilot_toggle') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="enabled" value="{{ 'off' if autopilot else 'on' }}">
+        <span class="mode">DRY-RUN</span>
+        <button class="ap-btn {{ 'on' if autopilot else '' }}" type="submit"
+                title="When ON, rule-critical incidents are contained automatically (dry-run) while you're away">
+          Autopilot: <strong>{{ 'ON' if autopilot else 'OFF' }}</strong></button>
+      </form>
+      <p>Bound to 127.0.0.1. Every action needs a named approver (or 'autopilot' for rule-critical incidents) and is written to an append-only audit log.</p>
     </div>
   </aside>
 
@@ -33,11 +40,13 @@
       <div class="crumbs">{% block crumbs %}<strong>Incident queue</strong>{% endblock %}</div>
       <div class="status-row">
         <span class="pill {{ 'pill-ok' if ai_ok else 'pill-down' }}" title="Local model via Ollama (checked every 30 s)"><i></i>{{ ai_label }}</span>
+        <span class="pill {{ 'pill-down' if autopilot else '' }}" title="Autonomous response to rule-critical incidents (dry-run)"><i></i>Autopilot {{ 'ON' if autopilot else 'off' }}</span>
         <span class="pill pill-warn" title="Response actions never run for real in this lab"><i></i>Dry-run</span>
         {% if analyst %}<span class="pill"><i class="dot-user"></i>{{ analyst }}</span>{% endif %}
       </div>
     </header>
     <main>
+      {% if autopilot %}<div class="banner-autopilot" role="status"><strong>Autopilot is ON.</strong> Rule-critical incidents are contained automatically (dry-run) and flagged for your review.</div>{% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
           <div class="flash flash-{{ category }}" role="status">{{ message }}</div>

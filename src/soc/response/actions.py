@@ -62,8 +62,20 @@ def validate_target(action: str, target: str) -> str:
     raise InvalidTarget(f"unknown action {action!r}")
 
 
-def plan(action: str, target: str) -> ResponsePlan:
+PLATFORMS = ("windows", "rhel")
+
+
+def plan(action: str, target: str, platform: str = "windows") -> ResponsePlan:
+    """The exact command + rollback for a validated target, per host platform.
+
+    windows: PowerShell on the Windows lab host. rhel: Red Hat Enterprise Linux / Rocky / Alma
+    (firewalld + shadow-utils), for Linux hosts such as the Phase 9 honeypot.
+    """
+    if platform not in PLATFORMS:
+        raise InvalidTarget(f"unknown platform {platform!r}")
     t = validate_target(action, target)
+    if platform == "rhel":
+        return _plan_rhel(action, t)
     if action == "block_ip":
         rule = f"SOC-block-{t}"
         return ResponsePlan(action, t,
@@ -81,6 +93,25 @@ def plan(action: str, target: str) -> ResponsePlan:
             "Set-NetFirewallProfile -All -DefaultInboundAction Block -DefaultOutboundAction Allow; "
             "Remove-NetFirewallRule -DisplayName 'SOC-isolation-allow-wazuh'",
             f"isolate {t}: block all traffic except the Wazuh agent channel")
+    return ResponsePlan(action, t, None, None, "human investigation task: no system change")
+
+
+def _plan_rhel(action: str, t: str) -> ResponsePlan:
+    if action == "block_ip":
+        family = "ipv6" if ":" in t else "ipv4"
+        rich = f"rule family=\"{family}\" source address=\"{t}\" drop"
+        return ResponsePlan(action, t,
+            f"firewall-cmd --permanent --add-rich-rule='{rich}' && firewall-cmd --reload",
+            f"firewall-cmd --permanent --remove-rich-rule='{rich}' && firewall-cmd --reload",
+            f"drop all traffic from {t} with firewalld")
+    if action == "disable_account":
+        return ResponsePlan(action, t, f"usermod --lock --expiredate 1 '{t}'", f"usermod --unlock --expiredate '' '{t}'",
+                            f"lock the password and expire Linux account {t}")
+    if action == "isolate_host":
+        return ResponsePlan(action, t,
+            "firewall-cmd --set-default-zone=drop && firewall-cmd --zone=drop --add-port=1514-1515/tcp",
+            "firewall-cmd --set-default-zone=public && firewall-cmd --zone=drop --remove-port=1514-1515/tcp",
+            f"isolate {t}: drop inbound traffic except the Wazuh agent ports (outbound needs a firewalld policy)")
     return ResponsePlan(action, t, None, None, "human investigation task: no system change")
 
 

@@ -7,7 +7,10 @@ Purpose: demonstrate AI + cybersecurity + networking fundamentals on a resume. T
 - FREE ONLY: Wazuh, Docker, Ollama (local models), Python stdlib/open-source libs. No paid APIs, no cloud LLM calls inside the project.
 - No agent framework (LangGraph/CrewAI/AutoGen) until Phase 6, and only if plain Python is clearly insufficient. Record the decision in docs/decisions.md.
 - Secrets live in `.env` (gitignored). Never commit credentials, tokens or IPs of real systems.
-- Response actions (block IP, isolate host, disable account) NEVER run without explicit human approval. Default mode is dry-run.
+- Response actions (block IP, isolate host, disable account) need explicit human approval. Default mode is dry-run; live execution is disabled in code.
+  - Exception (owner decision 2026-11-19, D6): AUTOPILOT. When the owner switches it ON, incidents that the deterministic RULES rate critical get their containment actions executed immediately, in DRY-RUN only, audited as actor "autopilot", and flagged for human review. The AI can never trigger autopilot, and an AI-raised priority doesn't count.
+- The AI agent may SUGGEST response actions; suggestions only target entities present in the incident and pass the same guards + validation as rule proposals.
+- Project rules may be changed by the owner as we go: record each change here and in docs/decisions.md.
 - Lab only: only act on the owner's own Windows host/VMs.
 
 ## Environment
@@ -45,3 +48,5 @@ docs/             ROADMAP.md, decisions.md, architecture, writeups
 Analyst returns JSON validated against a schema:
 `{ "summary": str, "severity": "low|medium|high|critical", "risks": [str], "recommendations": [str] }`
 Invalid JSON gets one retry, then a logged failure. The model never executes anything; it only proposes.
+
+Responder agent (D6) returns JSON: `{ "assessment": str, "confidence": "low|medium|high", "attacker_next_steps": [{technique, step, watch_for}], "actions": [{action, target, urgency, reason}] }`, vetted before anything is stored.

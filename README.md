@@ -44,7 +44,8 @@ flowchart LR
 | AI analyst | `src/soc/ai/` | Local LLM via Ollama structured outputs; JSON Schema validation, one retry, logged failure; eval harness on hand-labelled cases |
 | Decision engine | `src/soc/decision/` | Deterministic rules → proposals; own failed-logon burst correlation; guards that veto unsafe targets; `max(rules, AI)` |
 | Agent + approval | `src/soc/agent/` | Groups decisions into incidents, SQLite queue, approval state machine, append-only audit log (DB triggers) |
-| Response | `src/soc/response/` | Strict target validation, PowerShell command + rollback per action. **Dry-run only**: live execution raises |
+| Response | `src/soc/response/` | Strict target validation, command + rollback per action (Windows PowerShell + RHEL firewalld). **Dry-run only** |
+| Responder agent | `src/soc/ai/responder.py` + `redteam/` | Reads an incident, predicts attacker next steps with vendored red-team skills, suggests defensive actions to approve; optional bounded autopilot |
 | Web console | `src/soc/web/` | Flask + Jinja2. Incident pages, entity pivots, offline GeoIP, activity chart, detection-quality metrics, AI assistant chat (advisory, streaming) |
 
 ---

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS proposals (
     rule        TEXT NOT NULL,
     reason      TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'proposed',  -- proposed | approved | rejected | executed
+    source      TEXT NOT NULL DEFAULT 'rule',       -- rule | agent  (who proposed it)
     UNIQUE (incident_id, action, target)
 );
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -80,6 +81,23 @@ CREATE TABLE IF NOT EXISTS chat_messages (             -- assistant conversation
     duration_s  REAL
 );
 CREATE INDEX IF NOT EXISTS chat_scope ON chat_messages (scope, id);
+CREATE TABLE IF NOT EXISTS agent_assessments (          -- responder agent output per incident (advisory)
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    assessment  TEXT NOT NULL,
+    confidence  TEXT NOT NULL,
+    next_steps  TEXT NOT NULL,                      -- JSON list of {technique, step, watch_for}
+    skills_used TEXT NOT NULL,                      -- JSON list of red-team skill names
+    at          TEXT NOT NULL,
+    duration_s  REAL
+);
+CREATE INDEX IF NOT EXISTS assess_inc ON agent_assessments (incident_id, id);
+CREATE TABLE IF NOT EXISTS settings (                   -- small key/value (e.g. autopilot on/off)
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
@@ -109,6 +127,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         for name in ("verdict", "verdict_by", "verdict_at"):
             if name not in cols:
                 conn.execute(f"ALTER TABLE incidents ADD COLUMN {name} TEXT")
+        pcols = {r["name"] for r in conn.execute("PRAGMA table_info(proposals)")}
+        if "source" not in pcols:
+            conn.execute("ALTER TABLE proposals ADD COLUMN source TEXT NOT NULL DEFAULT 'rule'")
 
 
 ALERT_RETENTION_DAYS = 7
@@ -160,6 +181,48 @@ def chat_history(conn: sqlite3.Connection, scope: str, limit: int = 30) -> list[
     """Most recent messages of one conversation, oldest first."""
     rows = conn.execute("SELECT * FROM chat_messages WHERE scope = ? ORDER BY id DESC LIMIT ?", (scope, limit)).fetchall()
     return list(reversed(rows))
+
+
+def add_agent_proposals(conn: sqlite3.Connection, incident_id: str, proposals: list) -> int:
+    """Insert responder-suggested proposals (source='agent'). Deduped by UNIQUE(incident, action, target)."""
+    added = 0
+    with conn:
+        for p in proposals:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO proposals (incident_id, action, target, priority, rule, reason, source)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'agent')", (incident_id, p.action, p.target, p.priority, p.rule, p.reason))
+            if cur.rowcount:
+                audit(conn, "ai_responder", "proposal_created", incident_id, cur.lastrowid,
+                      action=p.action, target=p.target, priority=p.priority, source="agent")
+                added += 1
+    return added
+
+
+def save_assessment(conn: sqlite3.Connection, incident_id: str, model: str, assessment: str, confidence: str,
+                    next_steps: list, skills_used: list, duration_s: float | None = None) -> None:
+    with conn:
+        conn.execute("INSERT INTO agent_assessments (incident_id, model, assessment, confidence, next_steps,"
+                     " skills_used, at, duration_s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (incident_id, model, assessment, confidence, json.dumps(next_steps),
+                      json.dumps(skills_used), now(), duration_s))
+        audit(conn, "ai_responder", "agent_assessed", incident_id, confidence=confidence, model=model)
+
+
+def latest_assessment(conn: sqlite3.Connection, incident_id: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM agent_assessments WHERE incident_id = ? ORDER BY id DESC LIMIT 1",
+                        (incident_id,)).fetchone()
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    with conn:
+        conn.execute("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                     (key, value, now()))
 
 
 def audit(conn: sqlite3.Connection, actor: str, event: str, incident_id: str | None = None,

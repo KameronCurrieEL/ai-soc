@@ -40,3 +40,26 @@ def test_dry_run_only():
 def test_isolation_keeps_wazuh_channel_and_has_rollback():
     p = plan("isolate_host", "WIN-LAB01")
     assert "1514,1515" in p.command and "DefaultOutboundAction Allow" in p.rollback
+
+
+def test_rhel_playbooks_use_firewalld_and_usermod_with_rollback():
+    from soc.response.actions import plan
+    b = plan("block_ip", "8.8.8.8", platform="rhel")
+    assert "firewall-cmd --permanent --add-rich-rule='rule family=\"ipv4\" source address=\"8.8.8.8\" drop'" in b.command
+    assert "--remove-rich-rule" in b.rollback
+    assert 'family="ipv6"' in plan("block_ip", "2001:4860:4860::8888", platform="rhel").command
+    d = plan("disable_account", "bob", platform="rhel")
+    assert d.command == "usermod --lock --expiredate 1 'bob'" and "--unlock" in d.rollback
+    assert "set-default-zone=drop" in plan("isolate_host", "honeypot01", platform="rhel").command
+
+
+def test_rhel_still_validates_targets_and_unknown_platform_is_refused():
+    import pytest
+
+    from soc.response.actions import InvalidTarget, plan
+    with pytest.raises(InvalidTarget):
+        plan("disable_account", "bob'; rm -rf /", platform="rhel")
+    with pytest.raises(InvalidTarget):
+        plan("block_ip", "192.168.1.5", platform="rhel")
+    with pytest.raises(InvalidTarget, match="platform"):
+        plan("block_ip", "8.8.8.8", platform="macos")
