@@ -279,3 +279,37 @@ Add your own version under "My answer" each time you practise.
 "Analysts handle incidents, not alerts. My brute-force test produced three Wazuh correlation alerts plus my own burst detection, four proposals for one event. I group decisions by rule family plus the entity, like the source IP, and keep adding to an incident while activity continues within 60 minutes. Incident IDs are a hash of the key and start time, so re-running the pipeline updates the same incident instead of duplicating it, and if new activity raises the priority, that's logged as an escalation."
 
 **My answer:**
+
+---
+
+## Phase 7b/7c: Web dashboard + analyst views
+
+### 1. Your approval page can trigger firewall changes. How did you secure it?
+**Model answer:**
+"I treated it as a high-value target even though it's local. It binds to 127.0.0.1 only and rejects any Host header that isn't localhost, which stops DNS-rebinding attacks where a malicious website points its own domain at my machine. Every POST needs a per-session CSRF token compared in constant time, and the session cookie is SameSite=Strict and HttpOnly, so another site can't make my browser click Approve. Every page shows attacker-controlled log text, so Jinja2 autoescaping is on everywhere. I also send a strict Content-Security-Policy with no inline scripts or styles, and frame-ancestors none against clickjacking. There's no JavaScript at all; even the chart is server-rendered SVG. Flask debug mode is never enabled, because its debugger allows code execution."
+
+**My answer:**
+
+### 2. How do you geolocate an attacker IP, and how far do you trust it?
+**Model answer:**
+"First I classify the address: loopback means the machine itself, private means my own network, reserved can't come from the internet. Those never get a country, even if a database claims one. Only public IPs are looked up, offline, in DB-IP's free country database, using a binary search over about 730,000 sorted ranges. I deliberately didn't use a web API: it would break the no-cloud rule and would send attacker IPs to a third party, which can tip off an attacker watching lookups of their own infrastructure. I treat the result as a hint, not evidence. VPNs, Tor, cloud hosts and anycast show the network's location: 1.1.1.1 comes back as Australia because that's where Cloudflare's block is registered."
+
+**My answer:**
+
+### 3. What is pivoting, and how does your dashboard support it?
+**Model answer:**
+"Pivoting is moving from one indicator to everything related to it: from an attacker IP to the accounts it tried, then from an account to whether it later logged in successfully. Every user, IP, host, process, technique and rule on an incident page is a link to an entity page. That page shows the stored alerts, the incidents it appears in, a timeline, and the entities it co-occurs with, which are the next pivots. The logic is a pure function over stored alerts, so it's unit-tested without a web server. Incidents from before alerts were stored still match by IP and host, from their incident key."
+
+**My answer:**
+
+### 4. Why record a verdict when closing an incident, and why is 'benign' separate from 'false positive'?
+**Model answer:**
+"Verdicts turn analyst work into a measure of detection quality. My metrics page shows, per detection, the false-positive rate and the median time to close. The split matters because the fixes are different. A false positive means the rule is wrong, so I fix the rule. Benign means the rule was right, it really was a brute-force pattern, but it was me testing. That calls for an exception or a tuned threshold, not a rewrite. Lumping them together hides which rules are actually broken. The verdict is required at close and goes into the append-only audit log with the analyst's name."
+
+**My answer:**
+
+### 5. Why does the dashboard store alerts in SQLite instead of querying Wazuh on every page?
+**Model answer:**
+"Speed and independence. The pipeline already normalizes and scores every alert, so I store the normalized alert plus its decision, with 7-day retention. Pages read from one local file in milliseconds and still work while Wazuh is restarting. It's also consistent: the page shows exactly the data the decision engine saw, not a fresh query that might differ. The trade-off is that it's a cache. It's only as fresh as the last pipeline run, so the dashboard shows when that was and has a Refresh button."
+
+**My answer:**

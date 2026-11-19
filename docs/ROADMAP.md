@@ -13,6 +13,7 @@ Each phase ends with: working demo, tests where sensible, a short writeup in doc
 | 6 | Decision engine | Rules + thresholds map analysis to proposed actions (e.g. brute force -> propose block) | Proposals generated with reasons; nothing executes |
 | 7 | Agent + approval | Orchestrate pipeline, queue proposals, CLI approve/reject, audit log; dry-run response | Approve in CLI -> action logged (and optionally run on lab host) |
 | 7b | Web dashboard | Small local web UI over the Phase 7 queue: incident list, AI summary + rule reasons, approve/reject buttons, audit view. Localhost only, CSRF-protected | Approve in the browser -> same audit log entry as the CLI |
+| 7c | Analyst views | Plain-English summary, offline IP location, entity pivots, timeline, 24h activity chart, close verdicts + detection-quality metrics | Click from incident to entity and back; FP rate per rule on /metrics |
 | 8 | Portfolio | README with architecture diagram, demo GIF, writeups, resume bullets | A stranger can read the repo and understand it in 5 minutes |
 
 ## Attack simulations to generate data (own lab only)
