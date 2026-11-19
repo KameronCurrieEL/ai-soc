@@ -46,11 +46,11 @@ class FakeResponder:
             yield text[i:i + 20]
 
 
-def make_client(db, role="analyst", name="kameron", login=True):
+def make_client(db, role="analyst", name="kameron", login=True, tenant="default"):
     """A test client, logged in as `role` unless login=False. Seeds the user if needed."""
     conn = connect(db)
     if not conn.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone():
-        create_user(conn, name, hash_password("pw-" + name), role)
+        create_user(conn, name, hash_password("pw-" + name), role, tenant)
     conn.close()
     app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}),
                      llm_factory=FakeLLM, responder_factory=FakeResponder,

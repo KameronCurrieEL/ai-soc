@@ -65,10 +65,24 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     # ---------- per-request plumbing ----------
 
+    def cdb() -> sqlite3.Connection:
+        """Control DB (shared): users / auth. This is `db_path` itself."""
+        if "cconn" not in g:
+            g.cconn = store.connect(db_path)
+        return g.cconn
+
     def db() -> sqlite3.Connection:
+        """The current user's TENANT data DB (incidents, alerts, audit...). Isolated per tenant."""
         if "conn" not in g:
-            g.conn = store.connect(db_path)
+            u = auth.current_user()
+            g.conn = store.connect_tenant(db_path, u["tenant"] if u else store.DEFAULT_TENANT)
         return g.conn
+
+    @app.teardown_appcontext
+    def close_cdb(_exc: BaseException | None) -> None:
+        conn = g.pop("cconn", None)
+        if conn is not None:
+            conn.close()
 
     @app.teardown_appcontext
     def close_db(_exc: BaseException | None) -> None:
@@ -288,12 +302,12 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def login_post():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = auth.authenticate(db(), username, password)
+        user = auth.authenticate(cdb(), username, password)
         if not user:
             flash("Invalid username or password.", "error")
             return redirect(url_for("login"))
         auth.login_user(user)
-        store.touch_login(db(), user["username"])
+        store.touch_login(cdb(), user["username"])
         session.permanent = False
         nxt = session.pop("next", None)
         return redirect(nxt or url_for("overview"))
@@ -307,31 +321,32 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     @app.get("/users")
     @auth.require_role("admin")
     def users():
-        return render_template("users.html", users=store.list_users(db()), roles=auth.ROLES)
+        return render_template("users.html", users=store.list_users(cdb()), roles=auth.ROLES, tenants=sorted({u["tenant"] for u in store.list_users(cdb())}))
 
     @app.post("/users/add")
     @auth.require_role("admin")
     def users_add():
         name, role = request.form.get("username", "").strip(), request.form.get("role", "viewer")
         pw = request.form.get("password", "")
-        if not auth.valid_username(name) or role not in auth.ROLES or len(pw) < 8:
-            flash("Need a valid username, a role, and a password of at least 8 characters.", "error")
-        elif store.get_user(db(), name):
+        tenant = (request.form.get("tenant", "").strip() or store.DEFAULT_TENANT)
+        if not auth.valid_username(name) or role not in auth.ROLES or len(pw) < 8 or not store.valid_tenant(tenant):
+            flash("Need a valid username, tenant, role, and a password of at least 8 characters.", "error")
+        elif store.get_user(cdb(), name):
             flash(f"User {name!r} already exists.", "error")
         else:
-            store.create_user(db(), name, auth.hash_password(pw), role)
-            with db() as c:
-                store.audit(c, actor(), "user_created", note=f"{name} ({role})")
-            flash(f"Created user {name} ({role}).", "ok")
+            store.create_user(cdb(), name, auth.hash_password(pw), role, tenant)
+            with cdb() as c:
+                store.audit(c, actor(), "user_created", note=f"{name} ({role}) tenant={tenant}")
+            flash(f"Created user {name} ({role}) in tenant {tenant}.", "ok")
         return redirect(url_for("users"))
 
     @app.post("/users/role")
     @auth.require_role("admin")
     def users_role():
         name, role = request.form.get("username", "").strip(), request.form.get("role", "")
-        if role in auth.ROLES and store.get_user(db(), name):
-            store.set_user_role(db(), name, role)
-            with db() as c:
+        if role in auth.ROLES and store.get_user(cdb(), name):
+            store.set_user_role(cdb(), name, role)
+            with cdb() as c:
                 store.audit(c, actor(), "user_role_changed", note=f"{name} -> {role}")
             flash(f"{name} is now {role}.", "ok")
         return redirect(url_for("users"))
@@ -399,6 +414,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         if request.headers.get("X-Stream") == "1":
             messages, skills = responder.stream_messages(family, context)
             allowed = v["allowed_targets"]
+            _tenant = auth.current_user()["tenant"]
 
             def generate():
                 parts, start = [], time.monotonic()
@@ -411,7 +427,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
                     yield f"\n[responder unavailable: {exc}]"
                     return
                 assessment, errors = responder.parse("".join(parts))
-                c = store.connect(db_path)   # the request connection may be closed mid-stream
+                c = store.connect_tenant(db_path, _tenant)   # the request connection may be closed mid-stream
                 try:
                     if not assessment:
                         yield "\n\u0004ERR " + "; ".join(errors[:2])
@@ -485,6 +501,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
             return redirect(back + "#assistant")
         messages = assistant.build_messages(context, store.chat_history(conn, scope, limit=assistant.HISTORY_TURNS), question)
         store.save_chat(conn, scope, "user", actor() or "analyst", question)
+        _tenant = auth.current_user()["tenant"]
 
         def generate():
             parts: list[str] = []
@@ -497,7 +514,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
             except Exception as exc:  # Ollama down / model missing: tell the analyst, store nothing
                 yield f"\n[assistant unavailable: {exc}]"
                 return
-            c = store.connect(db_path)           # the request's connection may be closed while streaming
+            c = store.connect_tenant(db_path, _tenant)   # the request's connection may be closed while streaming
             try:
                 store.save_chat(c, scope, "assistant", llm.name, "".join(parts).strip(), time.monotonic() - start)
             finally:

@@ -19,6 +19,28 @@ from soc.decision.correlate import parse_time
 from soc.decision.models import max_priority
 
 DB_PATH = Path("data/outputs/soc.db")  # gitignored: contains real alert data
+DEFAULT_TENANT = "default"
+
+
+def valid_tenant(name: str) -> bool:
+    name = (name or "").strip()
+    return bool(name) and len(name) <= 40 and all(c.isalnum() or c in "._-" for c in name)
+
+
+def tenant_db_path(base: Path | str, tenant: str) -> Path:
+    """Per-tenant data file. The default tenant keeps the base DB (existing data); others are siloed.
+
+    Complete isolation: a user in tenant X only ever opens tenant X's database, so a query
+    cannot reach another tenant's rows. `base` is also the shared control DB (users/auth).
+    """
+    base = Path(base)
+    if tenant == DEFAULT_TENANT or not valid_tenant(tenant):
+        return base
+    return base.parent / "tenants" / f"{tenant}.db"
+
+
+def connect_tenant(base: Path | str, tenant: str) -> sqlite3.Connection:
+    return connect(tenant_db_path(base, tenant))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS incidents (

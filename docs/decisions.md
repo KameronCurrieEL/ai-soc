@@ -136,3 +136,26 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 **Controls.** All routes require login except the login page and static files; `/api/*` returns 401 when unauthenticated. State-changing routes require the analyst role; user management requires admin. CSRF, Host-header and CSP protections are unchanged. First run seeds an admin (SOC_ADMIN_USER/PASSWORD, or a generated one-time password printed to the log). Users managed via the admin UI or `python -m soc.web.auth`.
 
 **Consequences.** `tenant` columns exist on users (default 'default') as groundwork, but data is not yet isolated per tenant — that is step C2. The Flask dev server + signed-cookie sessions are fine for the local lab; a real deployment needs a WSGI server, HTTPS and secure cookie flags.
+
+---
+
+## D8 (2026-11-19): Multi-tenancy by database-per-tenant (SIEM step C2)
+
+**Context.** For a SaaS SIEM, one customer must never see another's alerts, incidents or audit log.
+
+**Decision.** Database-per-tenant (the "silo" model): each tenant's data lives in its own SQLite file
+(`data/outputs/tenants/<tenant>.db`; the `default` tenant keeps the existing `soc.db`, so current data
+is untouched). Users/auth live in a shared control DB. On each request the console opens the logged-in
+user's tenant DB for data and the control DB for auth. Admins assign a tenant when creating a user.
+
+**Why this model over a tenant_id column.**
+- **Provable isolation**: a query physically cannot reach another tenant's rows — there is no shared table
+  to forget a `WHERE tenant = ?` on. For a security product that is the strongest, most explainable story.
+- **Minimal blast radius**: the ~25 existing store queries were unchanged; only connection routing changed.
+- **Easy per-tenant backup/export/delete** (one file), and a clean path to per-tenant encryption later.
+
+**Trade-offs / consequences.** Cross-tenant analytics would need to fan out across files (not needed here).
+SQLite-per-tenant suits a lab and modest SaaS; a large deployment would map the same pattern onto a
+schema/database per tenant in Postgres. Autopilot and settings are naturally per-tenant (separate files).
+Tests prove: incidents/alerts don't leak across tenants, cross-tenant incident IDs 404, and a tenant name
+can't escape its directory (path traversal falls back to the default DB).

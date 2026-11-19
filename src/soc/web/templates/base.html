@@ -33,7 +33,7 @@
     <div class="side-foot">
       {% if user %}
       <div class="whoami">
-        <span class="dot-user"></span><strong>{{ user.name }}</strong><span class="role-tag">{{ user.role }}</span>
+        <span class="dot-user"></span><strong>{{ user.name }}</strong><span class="role-tag">{{ user.role }}</span><span class="role-tag" title="tenant">{{ user.tenant }}</span>
         <form method="post" action="{{ url_for('logout') }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button class="linklike" type="submit">sign out</button>

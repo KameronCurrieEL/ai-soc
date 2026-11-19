@@ -40,6 +40,8 @@
   <form method="post" action="{{ url_for('users_add') }}" class="actions">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input name="username" placeholder="username" required maxlength="40" aria-label="Username">
+    <input name="tenant" placeholder="tenant (default)" maxlength="40" aria-label="Tenant" list="tenant-list">
+    <datalist id="tenant-list">{% for t in tenants %}<option value="{{ t }}">{% endfor %}</datalist>
     <select name="role" aria-label="Role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select>
     <input name="password" type="password" placeholder="password (min 8 chars)" required aria-label="Password">
     <button class="btn btn-primary" type="submit">Create user</button>
