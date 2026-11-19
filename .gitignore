@@ -15,3 +15,6 @@ infra/wazuh-docker/
 
 # public TLS certs copied from the lab containers (`make wazuh-certs`); lab-specific, not secret
 infra/certs/
+
+# offline GeoIP database (`make geoip`), third-party data, re-downloadable
+data/geo/

@@ -50,3 +50,7 @@ soc:  ## analyst console, e.g. make soc ARGS="queue"
 .PHONY: web
 web:  ## local dashboard on http://localhost:8765
 	$(PY) -m soc.web
+
+.PHONY: geoip
+geoip:  ## download the offline IP -> country database (DB-IP Lite, monthly)
+	./infra/get_geoip.sh
