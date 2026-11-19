@@ -345,3 +345,15 @@ table.feed .desc { color: var(--text-2); max-width: 420px; }
 table.feed tr.row-new { animation: flash-in 2.5s ease-out; }
 @keyframes flash-in { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
 @media (prefers-reduced-motion: reduce) { .live-status.on::before, table.feed tr.row-new { animation: none; } }
+
+/* ---------- sources (multi-sensor) ---------- */
+.sensor-tag { font: 600 11px var(--mono); color: var(--text-2); background: var(--panel-2); border: 1px solid var(--line);
+              border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+.sources-card { margin-top: 4px; }
+.sources { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.sources li { display: flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--line);
+              border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.sources .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.sources .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.sources .s-count { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sources .s-last { font-size: 11.5px; }

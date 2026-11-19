@@ -47,6 +47,18 @@
   </section>
 </div>
 
+<section class="card sources-card">
+  <h2>Sources <small>alerts last 24h, by collector</small></h2>
+  {% if sensors %}
+  <ul class="sources">
+    {% for s in sensors %}
+    <li><span class="dot ok"></span><a href="{{ url_for('alerts_feed', sensor=s.sensor) }}">{{ s.sensor }}</a>
+      <span class="s-count">{{ s.count }}</span><span class="s-last muted">last {{ s.last[11:] }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No alerts in the last 24h. Add a source with <code>make soc ARGS="ingest --file … --sensor …"</code>.</p>{% endif %}
+</section>
+
 <div class="ov-grid-3">
   {% for title, etype, items in [('Top source IPs', 'ip', top_ips), ('Top accounts', 'user', top_users), ('Top hosts', 'host', top_hosts)] %}
   <section class="card">

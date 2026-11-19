@@ -16,9 +16,9 @@
     <option value="">all priorities</option>
     {% for p in ['critical', 'high', 'medium', 'low'] %}<option value="{{ p }}" {{ 'selected' if sel_priority == p }}>{{ p }}</option>{% endfor %}
   </select>
-  <select name="source" aria-label="Source">
+  <select name="sensor" aria-label="Source">
     <option value="">all sources</option>
-    {% for s in sources %}<option value="{{ s }}" {{ 'selected' if sel_source == s }}>{{ s }}</option>{% endfor %}
+    {% for s in sensors %}<option value="{{ s }}" {{ 'selected' if sel_sensor == s }}>{{ s }}</option>{% endfor %}
   </select>
   <input name="q" value="{{ q }}" placeholder="search user, IP, rule, text…" maxlength="80" aria-label="Search">
   <button class="btn" type="submit">Filter</button>
@@ -27,12 +27,13 @@
 
 <div class="table-wrap">
 <table class="list feed">
-  <thead><tr><th>Time (UTC)</th><th>Sev</th><th>Rule</th><th>Host</th><th>Account</th><th>Source IP</th><th>Description</th></tr></thead>
+  <thead><tr><th>Time (UTC)</th><th>Sev</th><th>Source</th><th>Rule</th><th>Host</th><th>Account</th><th>Source IP</th><th>Description</th></tr></thead>
   <tbody id="feed-body" data-endpoint="{{ url_for('alerts_json') }}">
   {% for a in alerts %}
     <tr data-id="{{ a.id }}">
       <td class="mono">{{ a.ts }}</td>
       <td><span class="badge b-{{ a.priority }}">{{ a.priority }}</span></td>
+      <td><span class="sensor-tag">{{ a.sensor }}</span></td>
       <td class="mono">{{ a.rule_id }}</td>
       <td>{{ elink('host', a.agent) }}</td>
       <td>{% if a.user %}{{ elink('user', a.user) }}{% else %}<span class="muted">–</span>{% endif %}</td>
@@ -40,7 +41,7 @@
       <td class="desc">{{ a.description }}</td>
     </tr>
   {% else %}
-    <tr class="feed-empty"><td colspan="7" class="muted">No alerts match. Run the pipeline (Refresh from Wazuh) to load alerts.</td></tr>
+    <tr class="feed-empty"><td colspan="8" class="muted">No alerts match. Run the pipeline (Refresh from Wazuh) to load alerts.</td></tr>
   {% endfor %}
   </tbody>
 </table>

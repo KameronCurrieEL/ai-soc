@@ -27,6 +27,7 @@ class Alert:
     src_ip_scope: str | None = None   # loopback | private | public | reserved
     event_id: str | None = None       # e.g. Windows 4625
     related_count: int = 0            # correlation alerts: how many earlier events led to this one
+    sensor: str = "wazuh-lab"         # which collector/SIEM this alert came from (multi-source)
     details: dict[str, str] = field(default_factory=dict)  # source-specific, human-readable extras
 
     def to_dict(self) -> dict:

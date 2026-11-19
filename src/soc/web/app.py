@@ -142,7 +142,8 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
                 "alerts_24h_by_prio": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)},
                 "mttr": totals.median_close_minutes, "fp_rate": totals.fp_rate, "family_stats": stats,
                 "top_ips": ents.get("ip", [])[:5], "top_users": ents.get("user", [])[:5],
-                "top_hosts": ents.get("host", [])[:5], "recent": open_incs[:8], "last_run": last_run}
+                "top_hosts": ents.get("host", [])[:5], "recent": open_incs[:8], "last_run": last_run,
+                "sensors": store.sensor_stats(conn, hours=24)}
 
     def incident_view(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
         proposals = []
@@ -201,7 +202,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         except (ValueError, TypeError):
             pass
         return {"id": r["id"], "ts": r["timestamp"][:19].replace("T", " "), "priority": r["priority"],
-                "source": r["source"], "rule_id": r["rule_id"], "description": r["description"],
+                "sensor": r["sensor"], "type": r["source"], "rule_id": r["rule_id"], "description": r["description"],
                 "agent": r["agent_name"], "user": r["user"] or "", "src_ip": r["src_ip"] or "",
                 "scope": data.get("src_ip_scope") or ""}
 
@@ -211,11 +212,11 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def alerts_feed():
         conn = db()
         prio = request.args.get("priority") or None
-        source = request.args.get("source") or None
+        sensor = request.args.get("sensor") or None
         q = request.args.get("q") or None
-        rows = store.latest_alerts(conn, FEED_LIMIT, priority=prio, source=source, q=q)
-        return render_template("alerts.html", alerts=[feed_row(r) for r in rows], sources=store.alert_sources(conn),
-                               sel_priority=prio or "", sel_source=source or "", q=q or "",
+        rows = store.latest_alerts(conn, FEED_LIMIT, priority=prio, sensor=sensor, q=q)
+        return render_template("alerts.html", alerts=[feed_row(r) for r in rows], sensors=store.sensors(conn),
+                               sel_priority=prio or "", sel_sensor=sensor or "", q=q or "",
                                total=conn.execute("SELECT COUNT(*) n FROM alerts").fetchone()["n"])
 
     @app.get("/api/alerts.json")
@@ -223,7 +224,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         """Polled by live.js for the auto-updating feed. Same filters as the page (query string)."""
         conn = db()
         rows = store.latest_alerts(conn, FEED_LIMIT, priority=request.args.get("priority") or None,
-                                   source=request.args.get("source") or None, q=request.args.get("q") or None)
+                                   sensor=request.args.get("sensor") or None, q=request.args.get("q") or None)
         return jsonify({"alerts": [feed_row(r) for r in rows],
                         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds")})
 

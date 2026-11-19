@@ -6,7 +6,7 @@ The pipeline only ever PROPOSES. Approval and execution live in soc.agent.approv
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from soc.agent.incidents import group_incidents
 from soc.agent.approval import run_autopilot
@@ -18,6 +18,12 @@ from soc.wazuh.alerts import alerts_from_response, build_alerts_query, parse_win
 from soc.wazuh.indexer import indexer_settings, search
 
 MAX_ALERTS = 1000
+DEFAULT_SENSOR = "wazuh-lab"
+
+
+def _tag(alerts: list[Alert], sensor: str) -> list[Alert]:
+    """Stamp each normalized alert with the sensor it came from (multi-source)."""
+    return [replace(a, sensor=sensor) for a in alerts]
 
 
 @dataclass
@@ -31,12 +37,26 @@ class RunStats:
     autopilot_actions: int = 0
 
 
-def fetch_alerts(env: dict[str, str], last: str) -> list[Alert]:
+def fetch_alerts(env: dict[str, str], last: str, sensor: str = DEFAULT_SENSOR) -> list[Alert]:
     settings = indexer_settings(env)
     if settings is None:
         raise RuntimeError("set WAZUH_INDEXER_USER / WAZUH_INDEXER_PASSWORD in .env")
     resp = search(settings, build_alerts_query(parse_window(last), size=MAX_ALERTS))
-    return [normalize(r) for r in alerts_from_response(resp)]
+    return _tag([normalize(r) for r in alerts_from_response(resp)], sensor)
+
+
+def alerts_from_file(path: str, sensor: str) -> list[Alert]:
+    """Load raw alerts (a JSON list of Wazuh-format dicts) from another source, normalize, tag the sensor.
+
+    Lets a second collector feed the same pipeline without a live Wazuh. The file is untrusted data:
+    we only read JSON and run it through the same normalizer, which tolerates missing/odd fields.
+    """
+    import json
+    from pathlib import Path
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        raw = raw.get("alerts") or raw.get("hits", {}).get("hits") or [raw]
+    return _tag([normalize(r) for r in raw], sensor)
 
 
 def make_ai_analyst(env: dict[str, str], notes: dict[str, str], stats: RunStats):

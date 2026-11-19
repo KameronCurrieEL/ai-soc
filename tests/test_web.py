@@ -142,17 +142,18 @@ def test_close_in_browser_requires_verdict_and_records_it(env):
     assert len(closed) == 1 and closed[0]["actor"] == "kameron" and '"benign"' in closed[0]["detail"]
 
 
-def _store_alert(db, alert_id, ip, scope, user, ts="2026-11-17T10:00:30.000+0000"):
+def _store_alert(db, alert_id, ip, scope, user, ts="2026-11-17T10:00:30.000+0000", sensor="wazuh-lab"):
     import json as _json
     data = {"id": alert_id, "timestamp": ts, "source": "soc_correlation", "rule_id": "soc-burst",
             "description": "Burst of failed logons", "agent_name": "windows-host", "user": user,
             "src_ip": ip, "src_ip_scope": scope, "mitre_ids": ["T1110"], "related_count": 12,
-            "details": {"host": "WIN-LAB01"}}
+            "sensor": sensor, "details": {"host": "WIN-LAB01"}}
     conn = connect(db)
     with conn:
-        conn.execute("INSERT INTO alerts VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO alerts (id, timestamp, source, rule_id, priority, description, agent_name, "
+                     "user, src_ip, sensor, data, decision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                      (alert_id, ts, "soc_correlation", "soc-burst", "high", data["description"], "windows-host",
-                      user, ip, _json.dumps(data), "{}"))
+                      user, ip, sensor, _json.dumps(data), "{}"))
 
 
 def _incident(db, key, ip_alert_id):
@@ -431,3 +432,18 @@ def test_feed_api_escapes_in_page_not_in_json(env):
     _store_alert(db, "x1", "8.8.8.8", "public", XSS)
     assert XSS not in client.get("/alerts").get_data(as_text=True)      # HTML page autoescapes
     assert XSS in client.get("/api/alerts.json").get_json()["alerts"][0]["user"]   # JSON carries raw; JS uses textContent
+
+
+def test_feed_filters_by_sensor_and_overview_lists_sources(env):
+    client, db, _ = env
+    from datetime import datetime, timedelta, timezone
+    from soc.agent.store import wazuh_ts
+    now = datetime.now(timezone.utc)
+    _store_alert(db, "s1", "8.8.8.8", "public", "a", ts=wazuh_ts(now - timedelta(minutes=3)), sensor="wazuh-lab")
+    _store_alert(db, "s2", "9.9.9.9", "public", "b", ts=wazuh_ts(now - timedelta(minutes=2)), sensor="wazuh-branch2")
+    feed = client.get("/alerts").get_data(as_text=True)
+    assert "wazuh-branch2" in feed and 'name="sensor"' in feed          # sensor shown + filter dropdown
+    only = client.get("/api/alerts.json?sensor=wazuh-branch2").get_json()["alerts"]
+    assert only and all(a["sensor"] == "wazuh-branch2" for a in only)
+    ov = client.get("/").get_data(as_text=True)
+    assert "Sources" in ov and "wazuh-branch2" in ov                     # overview Sources card

@@ -41,6 +41,7 @@
     const time = td("mono"); time.textContent = a.ts; tr.appendChild(time);
     const sev = td(); const b = document.createElement("span");
     b.className = "badge b-" + (PRIOS.has(a.priority) ? a.priority : "low"); b.textContent = a.priority; sev.appendChild(b); tr.appendChild(sev);
+    const src = td(); const st = document.createElement("span"); st.className = "sensor-tag"; st.textContent = a.sensor || ""; src.appendChild(st); tr.appendChild(src);
     const rule = td("mono"); rule.textContent = a.rule_id; tr.appendChild(rule);
     const host = td(); host.appendChild(a.agent ? entityLink("host", a.agent) : dash()); tr.appendChild(host);
     const user = td(); user.appendChild(a.user ? entityLink("user", a.user) : dash()); tr.appendChild(user);

@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     agent_name  TEXT NOT NULL,
     user        TEXT,
     src_ip      TEXT,
+    sensor      TEXT NOT NULL DEFAULT 'wazuh-lab',  -- which collector/SIEM sent it (multi-source)
     data        TEXT NOT NULL,                     -- JSON: normalized Alert
     decision    TEXT NOT NULL                      -- JSON: priority, reasons, proposals
 );
@@ -130,6 +131,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         pcols = {r["name"] for r in conn.execute("PRAGMA table_info(proposals)")}
         if "source" not in pcols:
             conn.execute("ALTER TABLE proposals ADD COLUMN source TEXT NOT NULL DEFAULT 'rule'")
+        acols = {r["name"] for r in conn.execute("PRAGMA table_info(alerts)")}
+        if acols and "sensor" not in acols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN sensor TEXT NOT NULL DEFAULT 'wazuh-lab'")
 
 
 ALERT_RETENTION_DAYS = 7
@@ -150,10 +154,13 @@ def save_alerts(conn: sqlite3.Connection, results: list) -> int:
         decision = {"priority": d.priority, "rule_priority": d.rule_priority, "ai_severity": d.ai_severity,
                     "reasons": d.reasons, "proposals": [p.to_dict() for p in d.proposals], "vetoed": d.vetoed}
         rows.append((a.id, a.timestamp, a.source, a.rule_id, d.priority, a.description, a.agent_name,
-                     a.user, a.src_ip, json.dumps(a.to_dict(), ensure_ascii=False), json.dumps(decision)))
+                     a.user, a.src_ip, getattr(a, "sensor", "wazuh-lab"),
+                     json.dumps(a.to_dict(), ensure_ascii=False), json.dumps(decision)))
     cutoff = wazuh_ts(datetime.now(timezone.utc) - timedelta(days=ALERT_RETENTION_DAYS))
     with conn:
-        conn.executemany("INSERT OR REPLACE INTO alerts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        conn.executemany("INSERT OR REPLACE INTO alerts (id, timestamp, source, rule_id, priority, description, "
+                         "agent_name, user, src_ip, sensor, data, decision) "
+                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
         conn.execute("DELETE FROM alerts WHERE timestamp < ?", (cutoff,))
     return len(rows)
 
@@ -171,16 +178,16 @@ def recent_alerts(conn: sqlite3.Connection, hours: int = 24) -> list[sqlite3.Row
 
 
 def latest_alerts(conn: sqlite3.Connection, limit: int = 100, priority: str | None = None,
-                  source: str | None = None, q: str | None = None) -> list[sqlite3.Row]:
-    """Newest alerts first, for the live feed. Optional filters: priority, source (sensor), free text.
+                  sensor: str | None = None, q: str | None = None) -> list[sqlite3.Row]:
+    """Newest alerts first, for the live feed. Optional filters: priority, sensor (source), free text.
 
     Parameterized LIKE: `q` is only ever a bound value, never concatenated into SQL (injection-safe).
     """
     where, params = ["1=1"], []
     if priority in ("low", "medium", "high", "critical"):
         where.append("priority = ?"); params.append(priority)
-    if source:
-        where.append("source = ?"); params.append(source)
+    if sensor:
+        where.append("sensor = ?"); params.append(sensor)
     if q and q.strip():
         where.append("(description LIKE ? OR user LIKE ? OR src_ip LIKE ? OR agent_name LIKE ? OR rule_id LIKE ?)")
         params += [f"%{q.strip()}%"] * 5
@@ -189,9 +196,18 @@ def latest_alerts(conn: sqlite3.Connection, limit: int = 100, priority: str | No
                         f"ORDER BY timestamp DESC, rowid DESC LIMIT ?", params).fetchall()
 
 
-def alert_sources(conn: sqlite3.Connection) -> list[str]:
-    """Distinct alert sources (sensors) seen, for the feed's filter dropdown."""
-    return [r["source"] for r in conn.execute("SELECT DISTINCT source FROM alerts ORDER BY source")]
+def sensors(conn: sqlite3.Connection) -> list[str]:
+    """Distinct sensors (collectors/SIEMs) seen, for the feed's filter dropdown."""
+    return [r["sensor"] for r in conn.execute("SELECT DISTINCT sensor FROM alerts ORDER BY sensor")]
+
+
+def sensor_stats(conn: sqlite3.Connection, hours: int = 24) -> list[dict]:
+    """Per-sensor alert count (last `hours`) and most recent alert time, for the overview's Sources card."""
+    cutoff = wazuh_ts(datetime.now(timezone.utc) - timedelta(hours=hours))
+    rows = conn.execute(
+        "SELECT sensor, COUNT(*) n, MAX(timestamp) last FROM alerts WHERE timestamp >= ? "
+        "GROUP BY sensor ORDER BY n DESC", (cutoff,)).fetchall()
+    return [{"sensor": r["sensor"], "count": r["n"], "last": r["last"][:19].replace("T", " ")} for r in rows]
 
 
 def save_chat(conn: sqlite3.Connection, scope: str, role: str, actor: str, content: str,
