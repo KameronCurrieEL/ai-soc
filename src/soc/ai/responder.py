@@ -154,10 +154,19 @@ def select_skills(family: str, context: str, limit: int = MAX_SKILLS) -> list[di
     return top or ranked[:2]   # always give the model at least a little context
 
 
+SKILL_DESC_CHARS = 220   # trim long descriptions: keeps the prompt small so CPU inference stays fast
+
+
 def format_skills(skills: list[dict]) -> str:
     if not skills:
         return "(no red-team skill index found)"
-    return "\n".join(f"- [{s['category']}] {s['name']}: {s['description']}" for s in skills)
+    lines = []
+    for s in skills:
+        desc = s["description"]
+        if len(desc) > SKILL_DESC_CHARS:
+            desc = desc[:SKILL_DESC_CHARS].rsplit(" ", 1)[0] + "…"
+        lines.append(f"- [{s['category']}] {s['name']}: {desc}")
+    return "\n".join(lines)
 
 
 # ---------- prompt ----------
