@@ -81,11 +81,14 @@ def test_unsafe_target_cannot_be_approved_and_refusal_is_audited(db):
 def test_close_incident_requires_all_proposals_resolved(db):
     conn, inc_id = db
     with pytest.raises(ApprovalError, match="still pending"):
-        close_incident(conn, inc_id, "kameron", "done")
+        close_incident(conn, inc_id, "kameron", "done", "benign")
     for p in get_proposals(conn, inc_id):
         reject(conn, p["id"], "kameron", "lab test")
-    close_incident(conn, inc_id, "kameron", "lab test, no real attacker")
-    assert get_incident(conn, inc_id)["status"] == "closed"
+    with pytest.raises(ApprovalError, match="verdict is required"):
+        close_incident(conn, inc_id, "kameron", "lab test", "probably fine")
+    close_incident(conn, inc_id, "kameron", "lab test, no real attacker", "benign")
+    row = get_incident(conn, inc_id)
+    assert (row["status"], row["verdict"], row["verdict_by"]) == ("closed", "benign", "kameron")
 
 
 def test_failed_transition_leaves_no_audit_entry(db):

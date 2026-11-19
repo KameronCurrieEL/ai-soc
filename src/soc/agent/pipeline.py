@@ -9,7 +9,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from soc.agent.incidents import group_incidents
-from soc.agent.store import audit, save_incidents
+from soc.agent.store import audit, save_alerts, save_incidents
 from soc.decision.engine import decide_batch, hardening_backlog
 from soc.parsing.normalize import normalize
 from soc.parsing.schema import Alert
@@ -58,6 +58,7 @@ def run_pipeline(conn: sqlite3.Connection, alerts: list[Alert], analyst=None,
     stats = stats or RunStats()
     stats.alerts = len(alerts)
     results = decide_batch(alerts, analyst)
+    save_alerts(conn, results)
     stats.decisions_with_proposals = sum(1 for _, d in results if d.proposals)
     incidents = group_incidents(results, ai_notes=ai_notes)
     stats.incidents = len(incidents)

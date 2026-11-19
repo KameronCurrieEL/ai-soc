@@ -82,6 +82,10 @@
   <form class="actions" method="post" action="{{ url_for('close', inc_id=inc['id']) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40">
+    <select name="verdict" required>
+      <option value="" selected disabled>verdict…</option>
+      {% for key, label in verdicts.items() %}<option value="{{ key }}" title="{{ label }}">{{ key }}</option>{% endfor %}
+    </select>
     <input name="note" placeholder="closing note (required)" required maxlength="300">
     <button class="btn" type="submit">Close</button>
   </form>

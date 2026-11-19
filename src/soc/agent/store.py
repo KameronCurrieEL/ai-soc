@@ -12,6 +12,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from datetime import timedelta
+
 from soc.agent.incidents import WINDOW_S, Incident
 from soc.decision.correlate import parse_time
 from soc.decision.models import max_priority
@@ -54,6 +56,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
     proposal_id INTEGER,
     detail      TEXT NOT NULL                      -- JSON
 );
+CREATE TABLE IF NOT EXISTS alerts (
+    id          TEXT PRIMARY KEY,                  -- Wazuh alert id (or burst:... for our own correlation)
+    timestamp   TEXT NOT NULL,                     -- Wazuh format, UTC (+0000): sorts as text
+    source      TEXT NOT NULL,
+    rule_id     TEXT NOT NULL,
+    priority    TEXT NOT NULL,                     -- decision engine's final priority
+    description TEXT NOT NULL,
+    agent_name  TEXT NOT NULL,
+    user        TEXT,
+    src_ip      TEXT,
+    data        TEXT NOT NULL,                     -- JSON: normalized Alert
+    decision    TEXT NOT NULL                      -- JSON: priority, reasons, proposals
+);
+CREATE INDEX IF NOT EXISTS alerts_ts ON alerts (timestamp);
 CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
@@ -72,7 +88,60 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after the first release, so existing databases keep working."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(incidents)")}
+    with conn:
+        for name in ("verdict", "verdict_by", "verdict_at"):
+            if name not in cols:
+                conn.execute(f"ALTER TABLE incidents ADD COLUMN {name} TEXT")
+
+
+ALERT_RETENTION_DAYS = 7
+
+
+def wazuh_ts(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+
+def save_alerts(conn: sqlite3.Connection, results: list) -> int:
+    """Store normalized alerts + their decisions so the dashboard never waits on Wazuh.
+
+    results: list of (Alert, Decision). Alerts are replaced, not audited: they are data,
+    not decisions. Old alerts are pruned to keep the database small.
+    """
+    rows = []
+    for a, d in results:
+        decision = {"priority": d.priority, "rule_priority": d.rule_priority, "ai_severity": d.ai_severity,
+                    "reasons": d.reasons, "proposals": [p.to_dict() for p in d.proposals], "vetoed": d.vetoed}
+        rows.append((a.id, a.timestamp, a.source, a.rule_id, d.priority, a.description, a.agent_name,
+                     a.user, a.src_ip, json.dumps(a.to_dict(), ensure_ascii=False), json.dumps(decision)))
+    cutoff = wazuh_ts(datetime.now(timezone.utc) - timedelta(days=ALERT_RETENTION_DAYS))
+    with conn:
+        conn.executemany("INSERT OR REPLACE INTO alerts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        conn.execute("DELETE FROM alerts WHERE timestamp < ?", (cutoff,))
+    return len(rows)
+
+
+def get_alerts(conn: sqlite3.Connection, ids: list[str]) -> list[sqlite3.Row]:
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    return conn.execute(f"SELECT * FROM alerts WHERE id IN ({marks}) ORDER BY timestamp", ids).fetchall()
+
+
+def recent_alerts(conn: sqlite3.Connection, hours: int = 24) -> list[sqlite3.Row]:
+    cutoff = wazuh_ts(datetime.now(timezone.utc) - timedelta(hours=hours))
+    return conn.execute("SELECT * FROM alerts WHERE timestamp >= ? ORDER BY timestamp", (cutoff,)).fetchall()
+
+
+def incidents_with_alerts(conn: sqlite3.Connection, alert_ids: set[str]) -> list[sqlite3.Row]:
+    """Incidents that contain any of the given alerts (entity pivot)."""
+    return [r for r in list_incidents(conn, None) if alert_ids & set(json.loads(r["alert_ids"]))]
 
 
 def audit(conn: sqlite3.Connection, actor: str, event: str, incident_id: str | None = None,

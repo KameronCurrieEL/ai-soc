@@ -16,6 +16,13 @@ from soc.response.actions import InvalidTarget, execute, plan
 
 PIPELINE_ACTOR = "pipeline"
 
+# Standard SOC dispositions. Recorded at close; they measure how good the detections are.
+VERDICTS = {
+    "true_positive": "True positive: real malicious or unauthorized activity",
+    "benign": "Benign: real activity, but expected or authorized (e.g. an admin or a test)",
+    "false_positive": "False positive: the detection was wrong",
+}
+
 
 class ApprovalError(Exception):
     pass
@@ -82,8 +89,10 @@ def run_approved(conn: sqlite3.Connection, proposal_id: int, actor: str, dry_run
     return output
 
 
-def close_incident(conn: sqlite3.Connection, incident_id: str, actor: str, note: str) -> None:
+def close_incident(conn: sqlite3.Connection, incident_id: str, actor: str, note: str, verdict: str) -> None:
     actor = _check_actor(actor)
+    if verdict not in VERDICTS:
+        raise ApprovalError(f"a verdict is required: one of {', '.join(VERDICTS)}")
     if not note.strip():
         raise ApprovalError("a closing note is required")
     with conn:
@@ -91,8 +100,9 @@ def close_incident(conn: sqlite3.Connection, incident_id: str, actor: str, note:
                                   "('proposed', 'approved')", (incident_id,)).fetchone()[0]
         if open_props:
             raise ApprovalError(f"{open_props} proposal(s) still pending: approve/run or reject them first")
-        cur = conn.execute("UPDATE incidents SET status = 'closed', updated_at = ? WHERE id = ? AND status = 'open'",
-                           (now(), incident_id))
+        cur = conn.execute("UPDATE incidents SET status = 'closed', verdict = ?, verdict_by = ?, verdict_at = ?,"
+                           " updated_at = ? WHERE id = ? AND status = 'open'",
+                           (verdict, actor, now(), now(), incident_id))
         if cur.rowcount != 1:
             raise ApprovalError(f"incident {incident_id} not found or already closed")
-        audit(conn, actor, "incident_closed", incident_id, note=note)
+        audit(conn, actor, "incident_closed", incident_id, verdict=verdict, note=note)

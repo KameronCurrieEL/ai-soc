@@ -6,7 +6,7 @@
   python -m soc.agent approve ID --by NAME [--note TEXT]
   python -m soc.agent reject  ID --by NAME --reason TEXT
   python -m soc.agent execute ID --by NAME         run an APPROVED proposal (dry-run only)
-  python -m soc.agent close INC-xxxx --by NAME --note TEXT
+  python -m soc.agent close INC-xxxx --by NAME --verdict true_positive|benign|false_positive --note TEXT
   python -m soc.agent audit [INC-xxxx]
 
 --by defaults to $SOC_ANALYST. The approver's name goes into the audit log.
@@ -121,7 +121,7 @@ def cmd_execute(args: argparse.Namespace) -> int:
 
 def cmd_close(args: argparse.Namespace) -> int:
     conn = store.connect()
-    return _guarded(lambda: approval.close_incident(conn, args.incident, _actor(args), args.note)
+    return _guarded(lambda: approval.close_incident(conn, args.incident, _actor(args), args.note, args.verdict)
                     or f"{args.incident} closed")
 
 
@@ -158,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("incident")
     c.add_argument("--by")
     c.add_argument("--note", required=True)
+    c.add_argument("--verdict", required=True, choices=list(approval.VERDICTS))
     c.set_defaults(fn=cmd_close)
     a = sub.add_parser("audit", help="show the audit log")
     a.add_argument("incident", nargs="?")

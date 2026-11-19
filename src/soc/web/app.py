@@ -116,7 +116,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
             except InvalidTarget as exc:
                 preview, error = None, str(exc)
             proposals.append({"row": p, "plan": preview, "error": error})
-        return render_template("incident.html", inc=r, proposals=proposals,
+        return render_template("incident.html", inc=r, proposals=proposals, verdicts=approval.VERDICTS,
                                audit=list(reversed(store.audit_entries(conn, inc_id, limit=200))))
 
     @app.get("/audit")
@@ -159,7 +159,8 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
     @app.post("/incident/<inc_id>/close")
     def close(inc_id: str):
         by = remember_analyst()
-        do(lambda: approval.close_incident(db(), inc_id, by, request.form.get("note", "")), f"{inc_id} closed")
+        do(lambda: approval.close_incident(db(), inc_id, by, request.form.get("note", ""),
+                                           request.form.get("verdict", "")), f"{inc_id} closed")
         return redirect(url_for("incident", inc_id=inc_id))
 
     @app.post("/run")

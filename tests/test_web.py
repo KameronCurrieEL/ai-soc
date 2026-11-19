@@ -98,3 +98,17 @@ def test_refresh_uses_pipeline_runner(env):
     client, _, _ = env
     r = client.post("/run", data={"csrf_token": token(client)}, follow_redirects=True)
     assert "3 alerts" in r.get_data(as_text=True)
+
+
+def test_close_in_browser_requires_verdict_and_records_it(env):
+    client, db, inc_id = env
+    t = token(client, f"/incident/{inc_id}")
+    for p in get_proposals(connect(db), inc_id):
+        client.post(f"/proposal/{p['id']}/reject", data={"by": "kameron", "reason": "lab", "csrf_token": t})
+    r = client.post(f"/incident/{inc_id}/close", data={"by": "kameron", "note": "lab", "csrf_token": t},
+                    follow_redirects=True)
+    assert "verdict is required" in r.get_data(as_text=True)
+    client.post(f"/incident/{inc_id}/close",
+                data={"by": "kameron", "note": "lab test", "verdict": "benign", "csrf_token": t})
+    closed = [e for e in audit_entries(connect(db)) if e["event"] == "incident_closed"]
+    assert len(closed) == 1 and closed[0]["actor"] == "kameron" and '"benign"' in closed[0]["detail"]
