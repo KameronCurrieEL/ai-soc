@@ -15,6 +15,8 @@
       <span>AI-SOC<small>Analyst console</small></span>
     </a>
     <nav aria-label="Main">
+      <a href="{{ url_for('overview') }}" class="{{ 'active' if nav == 'overview' }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4zM13 20h7V4h-7zM4 20h7v-5H4z"/></svg>Overview</a>
       <a href="{{ url_for('index') }}" class="{{ 'active' if nav in ('index', 'incident', 'entity') }}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Incident queue</a>
       <a href="{{ url_for('metrics') }}" class="{{ 'active' if nav == 'metrics' }}">

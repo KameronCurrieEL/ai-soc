@@ -22,6 +22,7 @@ import secrets
 import sqlite3
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import (Flask, Response, abort, flash, g, redirect, render_template, request, session,
@@ -117,6 +118,32 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
                 "buckets": buckets, "chart": charts.stacked_hourly(buckets), "chart_total": sum(b.total for b in buckets),
                 "alerts_24h": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)}}
 
+    def overview_view(conn: sqlite3.Connection) -> dict:
+        """SOC landing dashboard: the numbers a shift lead glances at first."""
+        open_incs = store.list_incidents(conn, "open")
+        counts = {p: sum(1 for r in open_incs if r["priority"] == p) for p in ("critical", "high", "medium", "low")}
+        pending = conn.execute("SELECT COUNT(*) n FROM proposals WHERE status = 'proposed'").fetchone()["n"]
+        approved = conn.execute("SELECT COUNT(*) n FROM proposals WHERE status = 'approved'").fetchone()["n"]
+        buckets = insights.activity(store.recent_alerts(conn, hours=24), hours=24)
+        since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")  # matches store.now()
+        autop = conn.execute("SELECT COUNT(*) n FROM audit_log WHERE event = 'proposal_executed' "
+                             "AND actor = 'autopilot' AND at >= ?", (since24,)).fetchone()["n"]
+        stats = insights.verdict_stats(store.list_incidents(conn, None))
+        totals = insights.FamilyStats("all")
+        for s in stats:
+            for f in ("open", "closed", "true_positive", "benign", "false_positive"):
+                setattr(totals, f, getattr(totals, f) + getattr(s, f))
+            totals.close_minutes += s.close_minutes
+        ents = insights.entities(store.recent_alerts(conn, hours=store.ALERT_RETENTION_DAYS * 24))
+        last_run = conn.execute("SELECT * FROM audit_log WHERE event = 'pipeline_run' ORDER BY id DESC LIMIT 1").fetchone()
+        return {"counts": counts, "open_total": len(open_incs), "pending": pending, "approved": approved,
+                "autopilot_24h": autop, "buckets": buckets, "chart": charts.stacked_hourly(buckets),
+                "chart_total": sum(b.total for b in buckets), "alerts_24h": sum(b.total for b in buckets),
+                "alerts_24h_by_prio": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)},
+                "mttr": totals.median_close_minutes, "fp_rate": totals.fp_rate, "family_stats": stats,
+                "top_ips": ents.get("ip", [])[:5], "top_users": ents.get("user", [])[:5],
+                "top_hosts": ents.get("host", [])[:5], "recent": open_incs[:8], "last_run": last_run}
+
     def incident_view(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
         proposals = []
         for p in store.get_proposals(conn, r["id"]):
@@ -143,6 +170,10 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     # ---------- pages ----------
 
     @app.get("/")
+    def overview():
+        return render_template("overview.html", **overview_view(db()))
+
+    @app.get("/queue")
     def index():
         conn = db()
         return render_template("index.html", **queue_view(conn, request.args.get("all") == "1"),

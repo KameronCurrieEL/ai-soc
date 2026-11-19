@@ -371,3 +371,24 @@ def test_autopilot_toggle_persists_and_is_audited(env):
     assert ("kameron", "autopilot_enabled") in [(e["actor"], e["event"]) for e in audit_entries(connect(db))]
     client.post("/autopilot", data={"enabled": "off", "by": "kameron", "csrf_token": t})
     assert get_setting(connect(db), "autopilot") == "off"
+
+
+def test_overview_dashboard_renders_kpis_and_severity(env):
+    client, db, inc_id = env
+    from datetime import datetime, timedelta, timezone
+    from soc.agent.store import wazuh_ts
+    _store_alert(db, "o1", "8.8.8.8", "public", "admin", ts=wazuh_ts(datetime.now(timezone.utc) - timedelta(minutes=5)))
+    page = client.get("/").get_data(as_text=True)
+    assert "Security overview" in page
+    for kpi in ("Pending approval", "Open incidents", "Median time to close", "Autopilot (24h)"):
+        assert kpi in page
+    assert "Open incidents by severity" in page and 'class="fill-high"' in page   # the fixture incident is high
+    assert "Top source IPs" in page and "8.8.8.8" in page                          # entity ranking
+    assert "/incident/" + inc_id in page                                           # recent incidents link
+    assert "style=" not in page                                                     # CSP stays strict
+
+
+def test_queue_moved_to_its_own_route(env):
+    client, _, _ = env
+    assert client.get("/queue").status_code == 200
+    assert "AI assistant" in client.get("/queue").get_data(as_text=True)   # assistant lives on the queue page

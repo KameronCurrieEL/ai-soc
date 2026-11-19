@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block crumbs %}<strong>Security overview</strong>{% endblock %}
+{% block content %}
+{% from "_macros.html" import elink %}
+<section class="page-head">
+  <div>
+    <h1>Security overview</h1>
+    <p class="meta">{% if last_run %}Last pipeline run {{ last_run['at'][:16] | replace('T', ' ') }} UTC{% else %}No pipeline run yet{% endif %}
+      · <a href="{{ url_for('index') }}">go to incident queue</a></p>
+  </div>
+  <form method="post" action="{{ url_for('run') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-primary" type="submit">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
+      Refresh from Wazuh</button>
+  </form>
+</section>
+
+<section class="kpis">
+  <div class="kpi {{ 'kpi-alert' if pending }}"><span>Pending approval</span><strong>{{ pending }}</strong><small>{{ approved }} approved waiting</small></div>
+  <div class="kpi"><span>Open incidents</span><strong>{{ open_total }}</strong><small>{{ counts['critical'] + counts['high'] }} high/critical</small></div>
+  <div class="kpi"><span>Alerts (24h)</span><strong>{{ alerts_24h }}</strong><small>{{ alerts_24h_by_prio['high'] + alerts_24h_by_prio['critical'] }} high+</small></div>
+  <div class="kpi"><span>Median time to close</span><strong>{% if mttr is not none %}{{ '%.0f' % mttr }}<em>m</em>{% else %}–{% endif %}</strong><small>MTTR</small></div>
+  <div class="kpi"><span>False-positive rate</span><strong>{% if fp_rate is not none %}{{ '%.0f' % (fp_rate * 100) }}<em>%</em>{% else %}–{% endif %}</strong><small>of judged incidents</small></div>
+  <div class="kpi {{ 'kpi-auto' if autopilot_24h }}"><span>Autopilot (24h)</span><strong>{{ autopilot_24h }}</strong><small>auto-contained</small></div>
+</section>
+
+<div class="ov-grid">
+  {% include "_activity_chart.html" %}
+
+  <section class="card">
+    <h2>Open incidents by severity</h2>
+    {% set total = counts.values() | sum %}
+    {% if total %}
+    <svg viewBox="0 0 100 9" preserveAspectRatio="none" class="sevbar" role="img" aria-label="Open incidents by severity">
+      {% set ns = namespace(x=0) %}
+      {% for p in ['critical', 'high', 'medium', 'low'] %}{% if counts[p] %}{% set w = counts[p] / total * 100 %}
+        <rect class="fill-{{ p }}" x="{{ ns.x }}" y="0" width="{{ w }}" height="9"/>{% set ns.x = ns.x + w %}{% endif %}{% endfor %}
+    </svg>
+    <ul class="sev-legend">
+      {% for p in ['critical', 'high', 'medium', 'low'] %}
+      <li><span class="sw fill-{{ p }}"></span>{{ p }}<strong>{{ counts[p] }}</strong></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No open incidents.</p>{% endif %}
+  </section>
+</div>
+
+<div class="ov-grid-3">
+  {% for title, etype, items in [('Top source IPs', 'ip', top_ips), ('Top accounts', 'user', top_users), ('Top hosts', 'host', top_hosts)] %}
+  <section class="card">
+    <h2>{{ title }} <small>7 days</small></h2>
+    {% if items %}
+    <ul class="rank">
+      {% for e in items %}
+      <li>{{ elink(etype, e.value) }}{% if e.note %} <span class="scope sc-{{ e.note }}">{{ e.note }}</span>{% endif %}<span class="count">{{ e.count }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No stored alerts yet.</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">Recent open incidents</h2>
+{% if recent %}
+<div class="table-wrap">
+<table class="list queue">
+  <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Last seen (UTC)</th></tr></thead>
+  <tbody>
+  {% for r in recent %}
+  <tr class="row-{{ r['priority'] }}">
+    <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
+    <td><a class="row-title" href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><code class="muted">{{ r['id'] }}</code></td>
+    <td class="num">{{ (r['alert_ids'] | fromjson) | length }}</td>
+    <td class="mono">{{ r['last_seen'][:16] | replace('T', ' ') }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<div class="empty"><p><strong>No open incidents.</strong> All clear.</p></div>{% endif %}
+{% endblock %}
