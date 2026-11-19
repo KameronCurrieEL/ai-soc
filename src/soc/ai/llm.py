@@ -64,14 +64,17 @@ class OllamaLLM:
         self.last_stop_reason = payload.get("done_reason", "")
         return payload.get("message", {}).get("content", "")
 
-    def stream(self, messages: list[dict], num_ctx: int = 4096) -> Iterator[str]:
+    def stream(self, messages: list[dict], num_ctx: int = 4096, fmt: dict | None = None) -> Iterator[str]:
         """Chat with streaming: yield text chunks as the model produces them (Ollama sends NDJSON lines).
 
         Used by the dashboard assistant so the analyst sees the answer forming instead of
         waiting ~30 s on CPU. num_ctx 4096: room for the incident context + a short history.
+        `fmt` is an optional JSON Schema (structured output): the responder streams schema-constrained JSON.
         """
         body = {"model": self.model, "messages": messages, "stream": True,
                 "options": {"temperature": self.temperature, "num_predict": self.max_tokens, "num_ctx": num_ctx}}
+        if fmt is not None:
+            body["format"] = fmt
         req = urllib.request.Request(f"{self.url}/api/chat", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
         start = time.monotonic()

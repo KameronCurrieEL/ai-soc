@@ -195,6 +195,16 @@ class ResponderResult:
     skills_used: list[str] = field(default_factory=list)
 
 
+def stream_messages(family: str, context: str) -> tuple[list[dict], list[dict]]:
+    """Build the chat messages + the selected skills for a STREAMING responder run.
+
+    Returns (messages, skills). The caller streams with RESPONSE_SCHEMA, accumulates the text,
+    then uses parse() + actions_to_proposals() on the full reply (same gates as the blocking path).
+    """
+    skills = select_skills(family, context)
+    return [{"role": "user", "content": build_prompt(context, skills)}], skills
+
+
 def respond(llm, family: str, context: str) -> ResponderResult:
     """Ask the agent about one incident. The caller turns result.assessment.actions into proposals."""
     skills = select_skills(family, context)

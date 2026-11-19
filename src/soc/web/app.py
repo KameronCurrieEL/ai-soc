@@ -395,6 +395,37 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         family = r["key"].split("|", 1)[0]
         context = assistant.incident_context(r, summary=v["summary"], hosts=v["hosts"], locations=v["locations"],
                                              involved=v["involved"], proposals=v["proposals"], timeline=v["timeline"])
+
+        if request.headers.get("X-Stream") == "1":
+            messages, skills = responder.stream_messages(family, context)
+            allowed = v["allowed_targets"]
+
+            def generate():
+                parts, start = [], time.monotonic()
+                try:
+                    llm = responder_factory()
+                    for chunk in llm.stream(messages, fmt=responder.RESPONSE_SCHEMA):
+                        parts.append(chunk)
+                        yield chunk
+                except Exception as exc:  # Ollama down / model missing
+                    yield f"\n[responder unavailable: {exc}]"
+                    return
+                assessment, errors = responder.parse("".join(parts))
+                c = store.connect(db_path)   # the request connection may be closed mid-stream
+                try:
+                    if not assessment:
+                        yield "\n\u0004ERR " + "; ".join(errors[:2])
+                        return
+                    c2 = assessment
+                    store.save_assessment(c, inc_id, llm.name, c2.assessment, c2.confidence,
+                                          c2.attacker_next_steps, [s["name"] for s in skills], time.monotonic() - start)
+                    proposals, rejected = responder.actions_to_proposals(c2, allowed)
+                    added = store.add_agent_proposals(c, inc_id, proposals)
+                    yield f"\n\u0004OK added {added} action(s)" + (f", {len(rejected)} blocked" if rejected else "")
+                finally:
+                    c.close()
+            return Response(stream_with_context(generate()), mimetype="text/plain; charset=utf-8",
+                            headers={"X-Accel-Buffering": "no"})
         try:
             result = responder.respond(responder_factory(), family, context)
         except Exception as exc:  # Ollama down / model missing

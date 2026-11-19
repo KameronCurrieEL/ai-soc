@@ -28,7 +28,7 @@ class FakeResponder:
     name = "fake-responder"
     reply = None  # set per test
 
-    def complete(self, system, user, schema=None):
+    def _reply(self):
         import json as _json
         return FakeResponder.reply or _json.dumps({
             "assessment": "Looks like a real brute force.", "confidence": "high",
@@ -36,6 +36,14 @@ class FakeResponder:
             "actions": [{"action": "block_ip", "target": "8.8.8.8", "urgency": "immediate", "reason": "public source"},
                         {"action": "isolate_host", "target": "windows-host", "urgency": "soon", "reason": "contain"}],
         })
+
+    def complete(self, system, user, schema=None):
+        return self._reply()
+
+    def stream(self, messages, num_ctx=4096, fmt=None):
+        text = self._reply()
+        for i in range(0, len(text), 20):   # emit in chunks, like Ollama streaming
+            yield text[i:i + 20]
 
 
 def make_client(db, role="analyst", name="kameron", login=True):
@@ -494,3 +502,32 @@ def test_feed_filters_by_sensor_and_overview_lists_sources(env):
     assert only and all(a["sensor"] == "wazuh-branch2" for a in only)
     ov = client.get("/").get_data(as_text=True)
     assert "Sources" in ov and "wazuh-branch2" in ov                     # overview Sources card
+
+
+def test_responder_streaming_saves_assessment_and_proposals(env):
+    client, db, _ = env
+    inc_id = _public_incident(db)       # key has @windows-host, so that host is a valid target
+    t = token(client, f"/incident/{inc_id}")
+    r = client.post(f"/incident/{inc_id}/respond", data={"csrf_token": t}, headers={"X-Stream": "1"})
+    assert r.status_code == 200 and r.mimetype == "text/plain"
+    body = r.get_data(as_text=True)
+    assert "Looks like a real brute force" in body          # the model output streamed through
+    assert "\u0004OK" in body                                # completion sentinel for the JS
+    # after the stream, the assessment is stored and the vetted action became an agent proposal
+    from soc.agent.store import latest_assessment
+    a = latest_assessment(connect(db), inc_id)
+    assert a and a["confidence"] == "high"
+    agent = [p for p in get_proposals(connect(db), inc_id) if p["source"] == "agent"]
+    assert any(p["action"] == "isolate_host" for p in agent)
+
+
+def test_responder_stream_still_requires_analyst(tmp_path):
+    from soc.agent.store import connect, save_incidents
+    db = tmp_path / "soc.db"
+    conn = connect(db)
+    inc = Incident("k", "BF", "high", "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000",
+                   ["a1"], [Proposal("investigate", "x", "high", "brute_force", "why")], [], [])
+    save_incidents(conn, [inc]); conn.close()
+    viewer = make_client(db, role="viewer", name="val")
+    t = token(viewer, f"/incident/{inc.id}")
+    assert viewer.post(f"/incident/{inc.id}/respond", data={"csrf_token": t}, headers={"X-Stream": "1"}).status_code == 403
