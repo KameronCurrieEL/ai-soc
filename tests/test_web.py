@@ -111,7 +111,7 @@ def test_post_without_or_with_wrong_csrf_token_is_refused(env):
 def test_foreign_host_header_is_refused(env):
     client, _, _ = env
     assert client.get("/", headers={"Host": "evil.example:8765"}).status_code == 400
-    assert client.get("/", headers={"Host": "127.0.0.1:8765"}).status_code == 200
+    assert client.get("/", headers={"Host": "localhost:8765"}).status_code == 200   # allowed host, session valid
 
 
 def test_approve_then_execute_writes_audit_with_actor(env):
@@ -130,10 +130,43 @@ def test_refusals_are_shown_not_crashes(env):
     client, db, inc_id = env
     t = token(client)
     p = pid(db, inc_id, "block_ip")
-    r = client.post(f"/proposal/{p}/execute", data={"by": "kameron", "csrf_token": t}, follow_redirects=True)
+    # executing a proposal that isn't approved yet is refused and shown, not a crash
+    r = client.post(f"/proposal/{p}/execute", data={"csrf_token": t}, follow_redirects=True)
     assert r.status_code == 200 and "Refused" in r.get_data(as_text=True)
-    r = client.post(f"/proposal/{p}/approve", data={"by": "pipeline", "csrf_token": t}, follow_redirects=True)
-    assert "named human" in r.get_data(as_text=True)
+
+
+def test_viewer_cannot_act_but_can_read(tmp_path):
+    from soc.agent.store import connect, save_incidents
+    db = tmp_path / "soc.db"
+    conn = connect(db)
+    inc = Incident("k", "Brute force", "high", "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000",
+                   ["a1"], [Proposal("block_ip", "8.8.8.8", "high", "brute_force", "why")], [], [])
+    save_incidents(conn, [inc]); conn.close()
+    viewer = make_client(db, role="viewer", name="val")
+    assert viewer.get(f"/incident/{inc.id}").status_code == 200          # read: allowed
+    t = token(viewer, f"/incident/{inc.id}")
+    p = next(x["id"] for x in get_proposals(connect(db), inc.id) if x["action"] == "block_ip")
+    assert viewer.post(f"/proposal/{p}/approve", data={"csrf_token": t}).status_code == 403   # act: forbidden
+    assert viewer.post("/run", data={"csrf_token": t}).status_code == 403
+    assert viewer.get("/users").status_code == 403                        # admin-only
+
+
+def test_login_required_and_actor_is_session_user(tmp_path):
+    from soc.agent.store import audit_entries, connect, save_incidents
+    db = tmp_path / "soc.db"
+    conn = connect(db)
+    inc = Incident("k", "Brute force", "high", "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000",
+                   ["a1"], [Proposal("block_ip", "8.8.8.8", "high", "brute_force", "why")], [], [])
+    save_incidents(conn, [inc]); conn.close()
+    anon = make_client(db, login=False)
+    assert anon.get("/").status_code == 302 and anon.get("/api/alerts.json").status_code == 401
+    analyst = make_client(db, role="analyst", name="dana")
+    t = token(analyst, f"/incident/{inc.id}")
+    p = next(x["id"] for x in get_proposals(connect(db), inc.id) if x["action"] == "block_ip")
+    # even if the form tries to spoof 'by', the audit actor is the logged-in user
+    analyst.post(f"/proposal/{p}/approve", data={"by": "someone-else", "csrf_token": t})
+    actors = [e["actor"] for e in audit_entries(connect(db)) if e["event"] == "proposal_approved"]
+    assert actors == ["dana"]
 
 
 def test_refresh_uses_pipeline_runner(env):

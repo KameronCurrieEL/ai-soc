@@ -122,3 +122,17 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 **Model.** A bake-off (`make eval` across candidates) compares qwen2.5:3b, qwen2.5:7b and Cisco Foundation-Sec-8B-Instruct; `OLLAMA_AGENT_MODEL` selects the agent's model independently of the triage model.
 
 **Consequences.** The console now runs autonomous actions in one narrow, audited, dry-run path. The red-team skills are offensive content (vendored, MIT, attributed) living in a defensive repo; the README explains the defensive-only use. If live execution is ever enabled, autopilot would need a hard allowlist and rate limit first.
+
+---
+
+## D7 (2026-11-19): Console authentication + RBAC (SIEM step C1)
+
+**Context.** Moving toward a SaaS-style SIEM, the console needs real accounts instead of a typed-in approver name. The owner authorized changing the free/local-only rule as the project evolves.
+
+**Decision.** Session-based login with three roles — viewer (read only), analyst (+ approve/reject/execute/close, run responder, toggle autopilot, run pipeline), admin (+ manage users). Passwords hashed with PBKDF2-HMAC-SHA256 (stdlib, 240k iterations, per-user salt), verified in constant time. No new dependencies.
+
+**Why it also strengthens the audit trail.** The audit actor is now the authenticated username, taken from the server-side session — not a value the browser can set. A form that spoofs `by=someone-else` is ignored (tested). This closes the old gap where accountability depended on someone typing their real name.
+
+**Controls.** All routes require login except the login page and static files; `/api/*` returns 401 when unauthenticated. State-changing routes require the analyst role; user management requires admin. CSRF, Host-header and CSP protections are unchanged. First run seeds an admin (SOC_ADMIN_USER/PASSWORD, or a generated one-time password printed to the log). Users managed via the admin UI or `python -m soc.web.auth`.
+
+**Consequences.** `tenant` columns exist on users (default 'default') as groundwork, but data is not yet isolated per tenant — that is step C2. The Flask dev server + signed-cookie sessions are fine for the local lab; a real deployment needs a WSGI server, HTTPS and secure cookie flags.
