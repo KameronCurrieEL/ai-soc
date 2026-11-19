@@ -190,3 +190,13 @@ def test_entity_page_rejects_bad_input_and_escapes_value(env):
     assert client.get("/entity?type=ip").status_code == 404
     page = client.get("/entity", query_string={"type": "user", "value": XSS}).get_data(as_text=True)
     assert XSS not in page and "&lt;script&gt;" in page
+
+
+def test_index_shows_activity_chart_without_inline_styles(env):
+    client, db, _ = env
+    from datetime import datetime, timedelta, timezone
+    from soc.agent.store import wazuh_ts
+    _store_alert(db, "c1", "::1", "loopback", "u", ts=wazuh_ts(datetime.now(timezone.utc) - timedelta(minutes=5)))
+    page = client.get("/").get_data(as_text=True)
+    assert "Alerts, last 24 hours" in page and 'class="seg-high"' in page and "1 alert (1 high)" in page
+    assert "style=" not in page            # CSP default-src 'self' would block inline styles

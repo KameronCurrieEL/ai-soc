@@ -27,6 +27,7 @@ from flask import Flask, abort, flash, g, redirect, render_template, request, se
 
 from soc.agent import approval, insights, store
 from soc.enrich import geoip
+from soc.web import charts
 from soc.parsing.schema import ip_scope
 from soc.response.actions import InvalidTarget, plan
 
@@ -103,7 +104,10 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
         last_run = conn.execute("SELECT * FROM audit_log WHERE event = 'pipeline_run' ORDER BY id DESC LIMIT 1").fetchone()
         counts = {p: sum(1 for i in incidents if i["row"]["priority"] == p and i["row"]["status"] == "open")
                   for p in ("critical", "high", "medium", "low")}
-        return render_template("index.html", incidents=incidents, show_all=show_all, last_run=last_run, counts=counts)
+        buckets = insights.activity(store.recent_alerts(conn, hours=24), hours=24)
+        return render_template("index.html", incidents=incidents, show_all=show_all, last_run=last_run, counts=counts,
+                               buckets=buckets, chart=charts.stacked_hourly(buckets),
+                               chart_total=sum(b.total for b in buckets))
 
     @app.get("/incident/<inc_id>")
     def incident(inc_id: str):

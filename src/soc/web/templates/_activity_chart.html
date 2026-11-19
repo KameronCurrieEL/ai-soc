@@ -1,0 +1,37 @@
+{# Alerts per hour, stacked by final priority. Pure SVG + CSS classes: no JS, no inline styles (CSP). #}
+<section class="card chart">
+  <div class="chart-head">
+    <h2>Alerts, last 24 hours <small class="muted">{{ chart_total }} total · UTC · hover a bar for counts</small></h2>
+    <ul class="legend" aria-label="Priority">
+      {% for p in ['low', 'medium', 'high', 'critical'] %}<li><span class="sw seg-{{ p }}"></span>{{ p }}</li>{% endfor %}
+    </ul>
+  </div>
+  <svg viewBox="0 0 {{ chart.width + 36 }} {{ chart.height }}" role="img" class="bars"
+       aria-label="Alerts per hour over the last 24 hours, stacked by priority; {{ chart_total }} in total. Table view below.">
+    <g transform="translate(36,0)">
+      <line class="grid" x1="0" x2="{{ chart.width }}" y1="0.5" y2="0.5"/>
+      <line class="axis" x1="0" x2="{{ chart.width }}" y1="{{ chart.plot_height + 0.5 }}" y2="{{ chart.plot_height + 0.5 }}"/>
+      <text class="tick" x="-6" y="9" text-anchor="end">{{ chart.y_max }}</text>
+      <text class="tick" x="-6" y="{{ chart.plot_height }}" text-anchor="end">0</text>
+      {% for b in chart.bars %}
+      <g class="hour">
+        <title>{{ b.tooltip }}</title>
+        <rect class="hit" x="{{ b.x }}" y="0" width="{{ b.width }}" height="{{ chart.plot_height }}"/>
+        {% for s in b.segments %}<rect class="seg-{{ s.priority }}" x="{{ b.x }}" y="{{ s.y }}" width="{{ b.width }}" height="{{ s.height }}" rx="1.5"/>{% endfor %}
+      </g>
+      {% endfor %}
+      {% for b in chart.ticks %}<text class="tick" x="{{ b.x }}" y="{{ chart.height - 4 }}">{{ b.label }}</text>{% endfor %}
+    </g>
+  </svg>
+  <details class="raw">
+    <summary>Table view</summary>
+    <table class="list">
+      <thead><tr><th>Hour (UTC)</th><th>Total</th>{% for p in ['critical', 'high', 'medium', 'low'] %}<th>{{ p }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for b in buckets if b.total %}
+        <tr><td>{{ b.start.strftime('%b %d %H:00') }}</td><td>{{ b.total }}</td>{% for p in ['critical', 'high', 'medium', 'low'] %}<td>{{ b.counts[p] }}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="6" class="muted">No stored alerts in the last 24 hours. Refresh from Wazuh to load them.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </details>
+</section>

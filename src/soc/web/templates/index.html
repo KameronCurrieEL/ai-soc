@@ -21,6 +21,8 @@
   {% endfor %}
 </section>
 
+{% include "_activity_chart.html" %}
+
 {% if incidents %}
 <table class="list">
   <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th></tr></thead>
