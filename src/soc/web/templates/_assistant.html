@@ -1,0 +1,36 @@
+{# AI assistant panel. Works without JS (form POST + reload); assistant.js streams the answer live.
+   Everything shown here is autoescaped text: model output and log data are never rendered as HTML. #}
+<section class="assistant card" id="assistant" aria-labelledby="as-title">
+  <div class="as-head">
+    <h2 id="as-title">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+      AI assistant</h2>
+    <span class="pill {{ 'pill-ok' if ai_ok else 'pill-down' }}"><i></i>{{ ai_label }}</span>
+  </div>
+  <p class="as-note">Advisory only. It reads {{ 'this incident’s' if chat_scope != 'overview' else 'the queue’s' }} stored facts,
+    can be wrong or misled by attacker-written log text, and <strong>cannot approve, reject or run anything</strong>.</p>
+
+  <div class="as-log" id="as-log" aria-live="polite">
+    {% for m in chat %}
+      <div class="msg msg-{{ m['role'] }}">
+        <div class="who">{{ 'You' if m['role'] == 'user' else 'Assistant' }}{% if m['role'] == 'user' and m['actor'] != 'analyst' %} ({{ m['actor'] }}){% endif %}
+          · {{ m['at'][11:16] }} UTC{% if m['duration_s'] %} · {{ '%.0f' % m['duration_s'] }}s{% endif %}</div>
+        <div class="text">{{ m['content'] }}</div>
+      </div>
+    {% else %}
+      <p class="as-empty">Ask about {{ 'this incident' if chat_scope != 'overview' else 'the open incidents' }}. Answers take ~10-40 s on CPU.</p>
+    {% endfor %}
+  </div>
+
+  <form class="as-form" method="post" action="{{ url_for('assistant_ask', scope=chat_scope) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="chips">
+      {% for q in suggestions %}<button class="chip" type="submit" name="question" value="{{ q }}" formnovalidate>{{ q }}</button>{% endfor %}
+    </div>
+    <div class="as-input">
+      <textarea name="question" rows="2" maxlength="500" placeholder="Ask a question… (Enter to send, Shift+Enter for a new line)"
+                aria-label="Question for the AI assistant"></textarea>
+      <button class="btn btn-primary ask" type="submit">Ask</button>
+    </div>
+  </form>
+</section>

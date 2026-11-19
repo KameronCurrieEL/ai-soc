@@ -1,19 +1,32 @@
 {% extends "base.html" %}
 {% block title %}{{ inc['id'] }}{% endblock %}
+{% block crumbs %}<a href="{{ url_for('index') }}">Incident queue</a><span class="sep">/</span><strong>{{ inc['id'] }}</strong>{% endblock %}
 {% block content %}
 {% from "_macros.html" import elink %}
-<p><a href="{{ url_for('index') }}">&larr; queue</a></p>
-<section class="head">
+{% set pending = proposals | selectattr('row.status', 'equalto', 'proposed') | list | length %}
+<section class="page-head">
   <div>
-    <h1><span class="badge b-{{ inc['priority'] }}">{{ inc['priority'] }}</span> {{ inc['title'] }}</h1>
-    <p class="muted"><code>{{ inc['id'] }}</code> · {{ inc['first_seen'][:19] | replace('T', ' ') }} &rarr;
-      {{ inc['last_seen'][:19] | replace('T', ' ') }} UTC · {{ (inc['alert_ids'] | fromjson) | length }} alerts ·
-      <span class="status s-{{ inc['status'] }}">{{ inc['status'] }}</span></p>
+    <div class="eyebrow">
+      <span class="badge b-{{ inc['priority'] }}">{{ inc['priority'] }}</span>
+      <span class="status s-{{ inc['status'] }}">{{ inc['status'] }}</span>
+      {% if inc['verdict'] %}<span class="tag">{{ inc['verdict'] | replace('_', ' ') }}</span>{% endif %}
+    </div>
+    <h1>{{ inc['title'] }}</h1>
+    <p class="meta"><code>{{ inc['id'] }}</code> · {{ inc['first_seen'][:19] | replace('T', ' ') }} &rarr;
+      {{ inc['last_seen'][11:19] }} UTC · {{ (inc['alert_ids'] | fromjson) | length }} alerts</p>
+  </div>
+  <div class="head-stats">
+    <div><strong>{{ pending }}</strong><span>pending</span></div>
+    <div><strong>{{ proposals | length }}</strong><span>proposals</span></div>
+    <div><strong>{{ (inc['alert_ids'] | fromjson) | length }}</strong><span>alerts</span></div>
   </div>
 </section>
 
+<div class="layout">
+<div class="layout-main">
+
 <section class="card summary">
-  <h2>What happened <small class="muted">built from parsed alert fields, no AI</small></h2>
+  <h2>What happened <small>built from parsed alert fields, no AI</small></h2>
   {% if summary %}<p>{{ summary }}</p>
   {% else %}<p class="muted">Alert details weren't stored for this incident (it was created before alert storage).
     New pipeline runs store them.</p>{% endif %}
@@ -52,18 +65,84 @@
 <div class="grid">
   <section class="card">
     <h2>Why: deterministic rules</h2>
-    <ul>{% for r in inc['reasons'] | fromjson %}<li>{{ r }}</li>{% endfor %}</ul>
+    <ul class="reasons">{% for r in inc['reasons'] | fromjson %}<li>{{ r }}</li>{% endfor %}</ul>
     {% for v in inc['vetoed'] | fromjson %}<p class="veto">Vetoed by safety guard: {{ v }}</p>{% endfor %}
   </section>
   <section class="card advisory">
-    <h2>AI analyst <small>advisory · may be wrong · can't lower priority</small></h2>
+    <h2>AI triage notes <small>advisory · can't lower priority</small></h2>
     {% set notes = inc['ai_notes'] | fromjson %}
-    {% if notes %}<ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
-    {% else %}<p class="muted">Not analyzed (run <code>make soc ARGS="run --ai"</code> to include the AI).</p>{% endif %}
+    {% if notes %}<ul class="reasons">{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">Not analyzed by the pipeline (run <code>make soc ARGS="run --ai"</code>). You can still ask the assistant.</p>{% endif %}
   </section>
 </div>
 
-<h2>Timeline <small class="muted">alerts and what was done about them, UTC</small></h2>
+<h2 class="section-title">Response actions <small>targets come from attacker-controllable log data: shown as text, validated before any command is built</small></h2>
+{% for item in proposals %}{% set p = item.row %}
+<section class="card proposal st-{{ p['status'] }}">
+  <div class="prop-head">
+    <span class="pid">#{{ p['id'] }}</span>
+    <strong class="action">{{ p['action'] | replace('_', ' ') }}</strong>
+    <code class="target">{{ p['target'] }}</code>
+    <span class="badge b-{{ p['priority'] }}">{{ p['priority'] }}</span>
+    <span class="status s-{{ p['status'] }}">{{ p['status'] }}</span>
+  </div>
+  <p class="prop-reason">{{ p['reason'] }} <small class="muted">rule: {{ p['rule'] }}</small></p>
+  {% if item.error %}
+    <p class="veto">Cannot be approved: {{ item.error }}</p>
+  {% elif item.plan.command %}
+    <dl class="cmd"><dt>Would run</dt><dd><code>{{ item.plan.command }}</code></dd>
+      <dt>Rollback</dt><dd><code>{{ item.plan.rollback }}</code></dd></dl>
+  {% else %}
+    <p class="muted">Human task: {{ item.plan.description }}</p>
+  {% endif %}
+
+  {% if p['status'] == 'proposed' %}
+  <div class="actions">
+    {% if not item.error %}
+    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='approve') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40" aria-label="Approver name">
+      <input name="note" placeholder="note (optional)" maxlength="200" aria-label="Approval note">
+      <button class="btn btn-ok" type="submit">Approve</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='reject') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40" aria-label="Name">
+      <input name="reason" placeholder="reason (required)" required maxlength="200" aria-label="Rejection reason">
+      <button class="btn btn-no" type="submit">Reject</button>
+    </form>
+  </div>
+  {% elif p['status'] == 'approved' %}
+  <div class="actions">
+    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='execute') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40" aria-label="Name">
+      <button class="btn btn-primary" type="submit">Execute (dry-run)</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if inc['status'] == 'open' %}
+<section class="card close-card">
+  <h2>Close incident</h2>
+  <form class="actions" method="post" action="{{ url_for('close', inc_id=inc['id']) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40" aria-label="Name">
+    <select name="verdict" required aria-label="Verdict">
+      <option value="" selected disabled>verdict…</option>
+      {% for key, label in verdicts.items() %}<option value="{{ key }}" title="{{ label }}">{{ key | replace('_', ' ') }}</option>{% endfor %}
+    </select>
+    <input name="note" placeholder="closing note (required)" required maxlength="300" aria-label="Closing note">
+    <button class="btn" type="submit">Close</button>
+  </form>
+</section>
+{% endif %}
+
+<h2 class="section-title">Timeline <small>alerts and what was done about them, UTC</small></h2>
+<section class="card">
 <ol class="timeline">
   {% for t in timeline %}
   <li class="tl-{{ t.kind }}">
@@ -77,76 +156,16 @@
   </li>
   {% else %}<li class="muted">Nothing recorded yet.</li>{% endfor %}
 </ol>
-
-<h2>Proposals</h2>
-<p class="muted">Targets come from log data an attacker may control; they are shown as plain text and validated before any command is built.</p>
-{% for item in proposals %}{% set p = item.row %}
-<section class="card proposal">
-  <div class="prop-head">
-    <span class="pid">#{{ p['id'] }}</span>
-    <strong>{{ p['action'] }}</strong>
-    <code class="target">{{ p['target'] }}</code>
-    <span class="badge b-{{ p['priority'] }}">{{ p['priority'] }}</span>
-    <span class="status s-{{ p['status'] }}">{{ p['status'] }}</span>
-  </div>
-  <p>{{ p['reason'] }} <small class="muted">(rule: {{ p['rule'] }})</small></p>
-  {% if item.error %}
-    <p class="veto">Cannot be approved: {{ item.error }}</p>
-  {% elif item.plan.command %}
-    <dl class="cmd"><dt>Would run (dry-run)</dt><dd><code>{{ item.plan.command }}</code></dd>
-      <dt>Rollback</dt><dd><code>{{ item.plan.rollback }}</code></dd></dl>
-  {% else %}
-    <p class="muted">Human task: {{ item.plan.description }}</p>
-  {% endif %}
-
-  {% if p['status'] == 'proposed' and not item.error %}
-  <div class="actions">
-    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='approve') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40">
-      <input name="note" placeholder="note (optional)" maxlength="200">
-      <button class="btn btn-ok" type="submit">Approve</button>
-    </form>
-  {% endif %}
-  {% if p['status'] == 'proposed' %}
-    {% if item.error %}<div class="actions">{% endif %}
-    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='reject') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40">
-      <input name="reason" placeholder="reason (required)" required maxlength="200">
-      <button class="btn btn-no" type="submit">Reject</button>
-    </form>
-  </div>
-  {% elif p['status'] == 'approved' %}
-  <div class="actions">
-    <form method="post" action="{{ url_for('proposal_action', pid=p['id'], verb='execute') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40">
-      <button class="btn" type="submit">Execute (dry-run)</button>
-    </form>
-  </div>
-  {% endif %}
 </section>
-{% endfor %}
-
-{% if inc['status'] == 'open' %}
-<section class="card">
-  <h2>Close incident</h2>
-  <form class="actions" method="post" action="{{ url_for('close', inc_id=inc['id']) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input name="by" value="{{ analyst }}" placeholder="your name" required maxlength="40">
-    <select name="verdict" required>
-      <option value="" selected disabled>verdict…</option>
-      {% for key, label in verdicts.items() %}<option value="{{ key }}" title="{{ label }}">{{ key }}</option>{% endfor %}
-    </select>
-    <input name="note" placeholder="closing note (required)" required maxlength="300">
-    <button class="btn" type="submit">Close</button>
-  </form>
-</section>
-{% endif %}
 
 <details class="raw">
   <summary>Raw audit trail ({{ audit | length }} entries)</summary>
   {% include "_audit_table.html" %}
 </details>
+</div>
+
+<aside class="layout-aside">
+  {% include "_assistant.html" %}
+</aside>
+</div>
 {% endblock %}

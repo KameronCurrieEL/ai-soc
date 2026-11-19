@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ p.value }}{% endblock %}
+{% block crumbs %}<a href="{{ url_for('index') }}">Incident queue</a><span class="sep">/</span><strong>{{ label }}</strong>{% endblock %}
 {% block content %}
 {% from "_macros.html" import elink %}
-<p><a href="{{ url_for('index') }}">&larr; queue</a></p>
-<section class="head">
+<section class="page-head">
   <div>
-    <h1><small class="muted">{{ label }}</small> <code>{{ p.value }}</code></h1>
-    <p class="muted">
+    <div class="eyebrow"><span class="tag">{{ label }}</span></div>
+    <h1><code class="h1-code">{{ p.value }}</code></h1>
+    <p class="meta">
       {% if p.alerts %}{{ p.alerts | length }} stored alert(s) ·
         {{ p.alerts[0]['timestamp'][:19] | replace('T', ' ') }} &rarr; {{ p.alerts[-1]['timestamp'][:19] | replace('T', ' ') }} UTC ·
         {% for prio, n in counts.items() %}<span class="badge b-{{ prio }}">{{ n }} {{ prio }}</span> {% endfor %}
@@ -56,8 +57,8 @@
   </section>
 </div>
 
-<h2>Activity <small class="muted">UTC, repeats collapsed</small></h2>
-<ol class="timeline">
+<h2 class="section-title">Activity <small>UTC, repeats collapsed</small></h2>
+<section class="card"><ol class="timeline">
   {% for t in timeline %}
   <li class="tl-{{ t.kind }}">
     <time>{{ t.at.strftime('%b %d %H:%M:%S') }}{% if t.until %} &ndash; {{ t.until.strftime('%H:%M:%S') }}{% endif %}</time>
@@ -68,5 +69,5 @@
     </div>
   </li>
   {% else %}<li class="muted">No stored alerts. Run the pipeline to store alerts (kept {{ retention_days }} days).</li>{% endfor %}
-</ol>
+</ol></section>
 {% endblock %}

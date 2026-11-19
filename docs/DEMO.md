@@ -21,7 +21,7 @@ make check            # python / docker / ollama all [OK]
 make wazuh-up         # starts manager, indexer, dashboard
 make wazuh-check      # wait ~1 min after start; HTTP 500 at first is normal (see Troubleshooting)
 make agents           # 001 windows-host ... active
-make test             # 246 passed: proves the code before you touch live data
+make test             # 262 passed: proves the code before you touch live data
 make web              # leave this terminal open
 ```
 
@@ -176,6 +176,22 @@ Refresh the incident page. The **AI analyst** box (dashed border, "advisory") no
 
 ---
 
+## 8b. The AI assistant (in the console)
+
+Needs Ollama running: the header pill must say **qwen2.5:3b online**.
+
+1. On the brute-force incident, click the suggestion **"Is this likely malicious? Why?"**. The answer streams in word by word (~10-40 s on CPU).
+2. Type your own question, e.g. "What should I check before approving the investigate action?", and press Enter.
+3. On the queue page, ask **"What should I look at first?"**. This version sees all open incidents.
+4. Reload the page: the conversation is kept, separately for each incident.
+5. Open the **Audit log**: asking the AI added nothing there. Advice isn't a decision; only your clicks are.
+
+**Proves:** the model helps you think, and the decision path doesn't change. It has no tools, it reads the same facts you see, and log text reaches it inside an untrusted-data block.
+
+**Talking point:** "In my eval, a 3B model fell for a prompt injection, so the assistant can explain and suggest checks, but it can't act. Its answers are shown as plain text, never as HTML."
+
+---
+
 ## 9. Screenshots for the README
 
 Save these as PNG files in `docs/screenshots/`, then ask Claude to add them to the README:
@@ -188,6 +204,7 @@ Save these as PNG files in `docs/screenshots/`, then ask Claude to add them to t
 | `approval.png` | A proposal after Execute (dry-run): command + rollback |
 | `metrics.png` | Metrics page with verdicts |
 | `audit.png` | Audit log showing your approvals and the refused `pipeline` approval |
+| `assistant.png` | Incident page with an AI assistant answer in the side panel |
 
 Tip: Win+Shift+S (Snipping Tool). Check before committing that no real Windows user names or hostnames are visible in the screenshots, or crop them out: the repo is public.
 

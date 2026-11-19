@@ -21,11 +21,14 @@ import json
 import secrets
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import (Flask, Response, abort, flash, g, redirect, render_template, request, session,
+                   stream_with_context, url_for)
 
 from soc.agent import approval, insights, store
+from soc.ai import assistant
 from soc.enrich import geoip
 from soc.web import charts
 from soc.parsing.schema import ip_scope
@@ -42,8 +45,12 @@ SECURITY_HEADERS = {
 }
 
 
-def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Flask:
-    """pipeline_runner(conn) -> RunStats; injectable so tests don't need Wazuh."""
+def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_factory=None, ai_status=None) -> Flask:
+    """Injectable for tests (no Wazuh or Ollama needed):
+    pipeline_runner(conn) -> RunStats; llm_factory() -> object with .name and .stream(messages);
+    ai_status() -> (ok: bool, label: str) for the header pill."""
+    llm_factory = llm_factory or _assistant_llm
+    ai_status = ai_status or _cached_ai_status()
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=secrets.token_hex(32),       # new key per start: old sessions/tokens become invalid
@@ -72,7 +79,9 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
 
     @app.context_processor
     def inject() -> dict:
-        return {"csrf_token": csrf_token(), "analyst": session.get("analyst", "")}
+        ok, label = ai_status()
+        return {"csrf_token": csrf_token(), "analyst": session.get("analyst", ""), "ai_ok": ok, "ai_label": label,
+                "nav": request.endpoint}
 
     @app.before_request
     def security_checks() -> None:
@@ -90,12 +99,9 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
         resp.headers.update(SECURITY_HEADERS)
         return resp
 
-    # ---------- pages ----------
+    # ---------- view models: one place builds what a page (and the assistant) sees ----------
 
-    @app.get("/")
-    def index():
-        show_all = request.args.get("all") == "1"
-        conn = db()
+    def queue_view(conn: sqlite3.Connection, show_all: bool) -> dict:
         incidents = []
         for r in store.list_incidents(conn, None if show_all else "open"):
             props = store.get_proposals(conn, r["id"])
@@ -105,9 +111,37 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
         counts = {p: sum(1 for i in incidents if i["row"]["priority"] == p and i["row"]["status"] == "open")
                   for p in ("critical", "high", "medium", "low")}
         buckets = insights.activity(store.recent_alerts(conn, hours=24), hours=24)
-        return render_template("index.html", incidents=incidents, show_all=show_all, last_run=last_run, counts=counts,
-                               buckets=buckets, chart=charts.stacked_hourly(buckets),
-                               chart_total=sum(b.total for b in buckets))
+        return {"incidents": incidents, "show_all": show_all, "last_run": last_run, "counts": counts,
+                "buckets": buckets, "chart": charts.stacked_hourly(buckets), "chart_total": sum(b.total for b in buckets),
+                "alerts_24h": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)}}
+
+    def incident_view(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
+        proposals = []
+        for p in store.get_proposals(conn, r["id"]):
+            try:
+                preview, error = plan(p["action"], p["target"]), None
+            except InvalidTarget as exc:
+                preview, error = None, str(exc)
+            proposals.append({"row": p, "plan": preview, "error": error})
+        alert_rows = store.get_alerts(conn, json.loads(r["alert_ids"]))
+        audit_rows = list(reversed(store.audit_entries(conn, r["id"], limit=200)))
+        hosts, ips = insights.hosts_and_ips(r, alert_rows)
+        # Loading the GeoIP database takes seconds: only do it when there is a public IP to look up.
+        geo_db = geoip.default_db() if any(ip_scope(ip) == "public" for ip in ips) else None
+        return {"inc": r, "proposals": proposals, "audit": audit_rows, "hosts": hosts,
+                "summary": insights.plain_summary(r, alert_rows) if alert_rows else None,
+                "locations": [geoip.locate(ip, hosts[0] if hosts else None, geo_db) for ip in ips],
+                "involved": {k: v for k, v in insights.entities(alert_rows).items() if k not in ("host", "ip")},
+                "timeline": insights.timeline(alert_rows, audit_rows)}
+
+    # ---------- pages ----------
+
+    @app.get("/")
+    def index():
+        conn = db()
+        return render_template("index.html", **queue_view(conn, request.args.get("all") == "1"),
+                               chat_scope="overview", chat=store.chat_history(conn, "overview"),
+                               suggestions=assistant.SUGGESTED_OVERVIEW)
 
     @app.get("/incident/<inc_id>")
     def incident(inc_id: str):
@@ -115,25 +149,9 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
         r = store.get_incident(conn, inc_id)
         if r is None:
             abort(404)
-        proposals = []
-        for p in store.get_proposals(conn, inc_id):
-            try:
-                preview, error = plan(p["action"], p["target"]), None
-            except InvalidTarget as exc:
-                preview, error = None, str(exc)
-            proposals.append({"row": p, "plan": preview, "error": error})
-        alert_rows = store.get_alerts(conn, json.loads(r["alert_ids"]))
-        audit_rows = list(reversed(store.audit_entries(conn, inc_id, limit=200)))
-        hosts, ips = insights.hosts_and_ips(r, alert_rows)
-        # Loading the GeoIP database takes seconds: only do it when there is a public IP to look up.
-        geo_db = geoip.default_db() if any(ip_scope(ip) == "public" for ip in ips) else None
-        locations = [geoip.locate(ip, hosts[0] if hosts else None, geo_db) for ip in ips]
-        involved = {k: v for k, v in insights.entities(alert_rows).items() if k not in ("host", "ip")}
-        return render_template(
-            "incident.html", inc=r, proposals=proposals, verdicts=approval.VERDICTS, audit=audit_rows,
-            summary=insights.plain_summary(r, alert_rows) if alert_rows else None,
-            hosts=hosts, locations=locations, involved=involved, geo_attribution=geoip.ATTRIBUTION,
-            timeline=insights.timeline(alert_rows, audit_rows))
+        return render_template("incident.html", **incident_view(conn, r), verdicts=approval.VERDICTS,
+                               geo_attribution=geoip.ATTRIBUTION, chat_scope=inc_id,
+                               chat=store.chat_history(conn, inc_id), suggestions=assistant.SUGGESTED_INCIDENT)
 
     @app.get("/entity")
     def entity():
@@ -212,6 +230,59 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
                                            request.form.get("verdict", "")), f"{inc_id} closed")
         return redirect(url_for("incident", inc_id=inc_id))
 
+    # ---------- assistant (advice only: no route here changes incidents or proposals) ----------
+
+    @app.post("/assistant/<scope>/ask")
+    def assistant_ask(scope: str):
+        conn = db()
+        if scope == "overview":
+            q = queue_view(conn, show_all=False)
+            context = assistant.overview_context(q["incidents"], q["alerts_24h"], q["last_run"]["at"] if q["last_run"] else None)
+            back = url_for("index")
+        else:
+            r = store.get_incident(conn, scope)
+            if r is None:
+                abort(404)
+            v = incident_view(conn, r)
+            context = assistant.incident_context(r, summary=v["summary"], hosts=v["hosts"], locations=v["locations"],
+                                                 involved=v["involved"], proposals=v["proposals"], timeline=v["timeline"])
+            back = url_for("incident", inc_id=scope)
+        # the question can come from the textarea or a suggestion button (both named "question")
+        question = next((q.strip() for q in request.form.getlist("question") if q.strip()), "")[:assistant.MAX_QUESTION_CHARS]
+        streaming = request.headers.get("X-Stream") == "1"
+        if not question:
+            if streaming:
+                return Response("Type a question first.", status=400, mimetype="text/plain")
+            flash("Type a question first.", "error")
+            return redirect(back + "#assistant")
+        messages = assistant.build_messages(context, store.chat_history(conn, scope, limit=assistant.HISTORY_TURNS), question)
+        store.save_chat(conn, scope, "user", session.get("analyst") or "analyst", question)
+
+        def generate():
+            parts: list[str] = []
+            start = time.monotonic()
+            try:
+                llm = llm_factory()
+                for chunk in llm.stream(messages):
+                    parts.append(chunk)
+                    yield chunk
+            except Exception as exc:  # Ollama down / model missing: tell the analyst, store nothing
+                yield f"\n[assistant unavailable: {exc}]"
+                return
+            c = store.connect(db_path)           # the request's connection may be closed while streaming
+            try:
+                store.save_chat(c, scope, "assistant", llm.name, "".join(parts).strip(), time.monotonic() - start)
+            finally:
+                c.close()
+
+        if streaming:
+            return Response(stream_with_context(generate()), mimetype="text/plain; charset=utf-8",
+                            headers={"X-Accel-Buffering": "no"})
+        answer = "".join(generate())             # no JavaScript: wait for the whole answer, then reload
+        if "[assistant unavailable:" in answer:
+            flash(answer.strip(), "error")
+        return redirect(back + "#assistant")
+
     @app.post("/run")
     def run():
         runner = pipeline_runner or _default_runner
@@ -226,6 +297,31 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
         return redirect(url_for("index"))
 
     return app
+
+
+def _assistant_llm():
+    """Chat model: a little warmer than triage (temperature 0.2) and a longer answer cap."""
+    from soc.ai.llm import llm_from_env
+    from soc.checks import load_env
+    llm = llm_from_env(load_env())
+    llm.temperature, llm.max_tokens, llm.timeout_s = 0.2, 350, 300.0
+    return llm
+
+
+def _cached_ai_status(ttl_s: float = 30.0):
+    """Header pill: is Ollama up with the model? Checked at most every 30 s so pages stay fast."""
+    cache: dict = {"at": -ttl_s, "value": (False, "AI: checking")}
+
+    def status() -> tuple[bool, str]:
+        if time.monotonic() - cache["at"] >= ttl_s:
+            from soc.checks import check_ollama, load_env, resolve_ollama_url
+            env = load_env()
+            model = env.get("OLLAMA_MODEL", "qwen2.5:3b")
+            result = check_ollama(resolve_ollama_url(env), model)
+            cache["value"] = (result.ok, f"{model} online" if result.ok else "AI offline")
+            cache["at"] = time.monotonic()
+        return cache["value"]
+    return status
 
 
 def _default_runner(conn: sqlite3.Connection):

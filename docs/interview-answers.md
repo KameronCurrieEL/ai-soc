@@ -313,3 +313,9 @@ Add your own version under "My answer" each time you practise.
 "Speed and independence. The pipeline already normalizes and scores every alert, so I store the normalized alert plus its decision, with 7-day retention. Pages read from one local file in milliseconds and still work while Wazuh is restarting. It's also consistent: the page shows exactly the data the decision engine saw, not a fresh query that might differ. The trade-off is that it's a cache. It's only as fresh as the last pipeline run, so the dashboard shows when that was and has a Refresh button."
 
 **My answer:**
+
+### 6. You added an LLM chat to an approval console. Why doesn't that undermine the approval gate?
+**Model answer:**
+"Because the chat has no power, only words. The assistant gets a read-only text snapshot of the incident, built by the same code that renders the page, so it sees exactly what I see. It has no tools: no route it touches can change an incident, a proposal or the audit log, and a test proves that. Log-derived text reaches it inside a fenced, untrusted-data block, with control characters stripped and lengths capped. The system prompt tells it to flag instruction-like text instead of obeying it. I know from my own eval that this alone isn't enough, which is exactly why the model can't act. Its answers are displayed as plain text, never as HTML. And the one script I added is served from the console itself, so the strict CSP didn't change."
+
+**My answer:**

@@ -10,7 +10,7 @@ import json
 import time
 import urllib.request
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Iterator, Protocol
 
 from soc.checks import resolve_ollama_url
 
@@ -63,6 +63,32 @@ class OllamaLLM:
         self.last_duration_s = time.monotonic() - start
         self.last_stop_reason = payload.get("done_reason", "")
         return payload.get("message", {}).get("content", "")
+
+    def stream(self, messages: list[dict], num_ctx: int = 4096) -> Iterator[str]:
+        """Chat with streaming: yield text chunks as the model produces them (Ollama sends NDJSON lines).
+
+        Used by the dashboard assistant so the analyst sees the answer forming instead of
+        waiting ~30 s on CPU. num_ctx 4096: room for the incident context + a short history.
+        """
+        body = {"model": self.model, "messages": messages, "stream": True,
+                "options": {"temperature": self.temperature, "num_predict": self.max_tokens, "num_ctx": num_ctx}}
+        req = urllib.request.Request(f"{self.url}/api/chat", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        start = time.monotonic()
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            for line in resp:
+                if not line.strip():
+                    continue
+                part = json.loads(line)
+                if part.get("error"):
+                    raise RuntimeError(part["error"])
+                chunk = part.get("message", {}).get("content", "")
+                if chunk:
+                    yield chunk
+                if part.get("done"):
+                    self.last_stop_reason = part.get("done_reason", "")
+                    break
+        self.last_duration_s = time.monotonic() - start
 
 
 def llm_from_env(env: dict[str, str]) -> OllamaLLM:

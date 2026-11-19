@@ -1,21 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Detection quality{% endblock %}
+{% block crumbs %}<strong>Detection quality</strong>{% endblock %}
 {% block content %}
-<section class="head">
+<section class="page-head">
   <div>
     <h1>Detection quality</h1>
-    <p class="muted">From the verdicts analysts record when closing incidents. A high false-positive rate means the
+    <p class="meta">From the verdicts analysts record when closing incidents. A high false-positive rate means the
       rule needs fixing; many <em>benign</em> verdicts mean it's right but needs an exception (e.g. an admin's scheduled task).</p>
   </div>
 </section>
 <section class="tiles">
-  <div class="tile"><strong>{{ totals.open }}</strong><small>open</small></div>
-  <div class="tile"><strong>{{ totals.closed }}</strong><small>closed</small></div>
-  <div class="tile"><strong>{{ '%.0f%%' % (totals.fp_rate * 100) if totals.fp_rate is not none else '–' }}</strong><small>false-positive rate</small></div>
-  <div class="tile"><strong>{{ '%.0f' % totals.median_close_minutes if totals.median_close_minutes is not none else '–' }}</strong><small>median min to close</small></div>
+  <div class="tile"><span class="tile-label">open</span><strong>{{ totals.open }}</strong><small>incidents</small></div>
+  <div class="tile"><span class="tile-label">closed</span><strong>{{ totals.closed }}</strong><small>incidents</small></div>
+  <div class="tile"><span class="tile-label">false-positive rate</span><strong>{{ '%.0f%%' % (totals.fp_rate * 100) if totals.fp_rate is not none else '–' }}</strong><small>of judged incidents</small></div>
+  <div class="tile"><span class="tile-label">median time to close</span><strong>{{ '%.0f' % totals.median_close_minutes if totals.median_close_minutes is not none else '–' }}</strong><small>minutes</small></div>
 </section>
 {% if stats %}
-<table class="list">
+<div class="table-wrap"><table class="list">
   <thead><tr><th>Detection</th><th>Open</th><th>Closed</th><th>True pos.</th><th>Benign</th><th>False pos.</th><th>No verdict</th><th>FP rate</th><th>Median close</th></tr></thead>
   <tbody>
   {% for s in stats %}
@@ -28,8 +29,8 @@
     </tr>
   {% endfor %}
   </tbody>
-</table>
-<p class="muted">FP rate = false positives ÷ incidents with a verdict. "No verdict" = closed before verdicts were required.
+</table></div>
+<p class="muted note">FP rate = false positives ÷ incidents with a verdict. "No verdict" = closed before verdicts were required.
   Time to close runs from when the pipeline opened the incident to when an analyst closed it.</p>
 {% else %}<p class="empty">No incidents yet.</p>{% endif %}
 {% endblock %}

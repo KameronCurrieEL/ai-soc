@@ -1,45 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="head">
+<section class="page-head">
   <div>
     <h1>{{ 'All incidents' if show_all else 'Open incidents' }}</h1>
-    <p class="muted">
-      {% if last_run %}Last pipeline run {{ last_run['at'][:19] | replace('T', ' ') }} UTC
-        ({{ (last_run['detail'] | fromjson)['alerts'] }} alerts){% else %}No pipeline run yet{% endif %}
-      · <a href="{{ url_for('index', all='0' if show_all else '1') }}">{{ 'show open only' if show_all else 'show closed too' }}</a>
+    <p class="meta">
+      {% if last_run %}Last pipeline run {{ last_run['at'][:16] | replace('T', ' ') }} UTC
+        · {{ (last_run['detail'] | fromjson)['alerts'] }} alerts{% else %}No pipeline run yet{% endif %}
+      · <a href="{{ url_for('index', all='0' if show_all else '1') }}">{{ 'show open only' if show_all else 'include closed' }}</a>
     </p>
   </div>
   <form method="post" action="{{ url_for('run') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button class="btn" type="submit">Refresh from Wazuh (rules only)</button>
+    <button class="btn btn-primary" type="submit">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
+      Refresh from Wazuh</button>
   </form>
 </section>
 
 <section class="tiles">
   {% for p in ['critical', 'high', 'medium', 'low'] %}
-    <div class="tile"><span class="badge b-{{ p }}">{{ p }}</span><strong>{{ counts[p] }}</strong><small>open</small></div>
+    <div class="tile t-{{ p }}"><span class="tile-label">{{ p }}</span><strong>{{ counts[p] }}</strong><small>open incidents</small></div>
   {% endfor %}
 </section>
 
-{% include "_activity_chart.html" %}
+<div class="layout">
+<div class="layout-main">
+  {% include "_activity_chart.html" %}
 
-{% if incidents %}
-<table class="list">
-  <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th></tr></thead>
-  <tbody>
-  {% for i in incidents %}{% set r = i.row %}
-    <tr>
-      <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
-      <td><a href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><br><code class="muted">{{ r['id'] }}</code></td>
-      <td>{{ (r['alert_ids'] | fromjson) | length }}</td>
-      <td>{% if i.pending %}<strong>{{ i.pending }} pending</strong>{% elif i.approved %}{{ i.approved }} approved{% else %}{{ i.total }} resolved{% endif %}</td>
-      <td>{{ r['last_seen'][:19] | replace('T', ' ') }}</td>
-      <td><span class="status s-{{ r['status'] }}">{{ r['status'] }}</span></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="empty">Queue is empty. Nothing needs a decision right now.</p>
-{% endif %}
+  <h2 class="section-title">Queue</h2>
+  {% if incidents %}
+  <div class="table-wrap">
+  <table class="list queue">
+    <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for i in incidents %}{% set r = i.row %}
+      <tr class="row-{{ r['priority'] }}">
+        <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
+        <td><a class="row-title" href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><code class="muted">{{ r['id'] }}</code></td>
+        <td class="num">{{ (r['alert_ids'] | fromjson) | length }}</td>
+        <td>{% if i.pending %}<span class="tag tag-attn">{{ i.pending }} pending</span>{% elif i.approved %}<span class="tag">{{ i.approved }} approved</span>{% else %}<span class="muted">{{ i.total }} resolved</span>{% endif %}</td>
+        <td class="mono">{{ r['last_seen'][:16] | replace('T', ' ') }}</td>
+        <td><span class="status s-{{ r['status'] }}">{{ r['status'] }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+    <p><strong>Queue is empty.</strong> Nothing needs a decision right now.</p>
+    {% if not show_all %}<p><a href="{{ url_for('index', all='1') }}">Show closed incidents</a></p>{% endif %}
+  </div>
+  {% endif %}
+</div>
+<aside class="layout-aside">
+  {% include "_assistant.html" %}
+</aside>
+</div>
 {% endblock %}

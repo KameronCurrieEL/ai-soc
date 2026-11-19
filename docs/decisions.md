@@ -78,3 +78,26 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 - Country-level, not city: city data is ~25x larger and gives false precision.
 
 **Consequences.** Location is approximate and says so on the page (VPN/Tor/cloud/anycast: e.g. 1.1.1.1 shows Australia). The database needs a monthly re-download to stay current. Loading takes ~6 s, so the page only loads it when an incident has a public IP. Attribution is shown whenever a country is displayed (license requirement).
+
+---
+
+## D5 (2026-11-19): AI assistant in the console, with one same-origin script
+
+**Context.** The analyst wants to ask the local model questions about an incident (or the whole queue) while deciding. On CPU an answer takes ~10-40 s, so it has to stream. D3 said "no JavaScript".
+
+**Decision.**
+- **Chat panel:** an assistant panel on the queue and incident pages, backed by Ollama's streaming `/api/chat`.
+- **Same-origin script:** one script, `static/assistant.js`, served from the console itself. The CSP is unchanged (`default-src 'self'`): there's still no inline script or style, and nothing loads from elsewhere.
+- **Works without JavaScript:** the form also works with JavaScript off, by posting and then reloading.
+- **Chat storage:** conversations are stored in their own `chat_messages` table. They are advice, not decisions, so they don't go in the audit log.
+
+**Guardrails (why this doesn't weaken the approval gate).**
+- No route the assistant uses changes incidents, proposals or the audit log (tested). It has no tools; it returns text.
+- Its context is built by the same code as the incident page, so it sees exactly what the analyst sees. Log-derived values are stripped of control characters, length-capped, and placed inside `<soc_data>`. The system prompt marks that block as untrusted and says to flag instruction-like text. Phase 5 showed that delimiters alone fail, which is why the model still can't act.
+- Answers are inserted with `textContent` (JS) or Jinja autoescaping (no JS): model output can never become HTML.
+- The model has no memory: the last 6 turns are sent back each time, the incident context only with the newest question.
+
+**Consequences.**
+- The console is no longer 100% JS-free. The script is small, reviewed, and optional.
+- Answers are only as good as a 3B model: useful for explaining and checklists, not for verdicts, which stay with the rules and the human.
+- Ollama status is checked at most every 30 s for the header pill.

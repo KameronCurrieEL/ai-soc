@@ -11,6 +11,17 @@ from soc.web.app import create_app
 XSS = "<script>alert(1)</script>"
 
 
+class FakeLLM:
+    """Stands in for Ollama: records what it was sent, streams a canned answer."""
+    name = "fake-model"
+    sent: list = []
+    answer = ["Looks like ", "a local test. ", XSS]
+
+    def stream(self, messages):
+        FakeLLM.sent.append(messages)
+        yield from FakeLLM.answer
+
+
 @pytest.fixture
 def env(tmp_path):
     db = tmp_path / "soc.db"
@@ -20,7 +31,8 @@ def env(tmp_path):
                             Proposal("investigate", XSS, "high", "brute_force", "why")], [], [])
     save_incidents(conn, [inc])
     conn.close()
-    app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}))
+    app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}),
+                     llm_factory=FakeLLM, ai_status=lambda: (True, "fake-model online"))
     app.config["TESTING"] = True
     return app.test_client(), db, inc.id
 
@@ -211,3 +223,80 @@ def test_metrics_page_counts_verdicts(env):
                                                    "verdict": "false_positive", "csrf_token": t})
     page = client.get("/metrics").get_data(as_text=True)
     assert "Detection quality" in page and "100%" in page and "<code>k</code>" in page
+
+
+# ---------- AI assistant ----------
+
+def test_assistant_streams_answer_stores_chat_and_changes_nothing(env):
+    client, db, inc_id = env
+    FakeLLM.sent.clear()
+    before = [(p["id"], p["status"]) for p in get_proposals(connect(db), inc_id)]
+    t = token(client, f"/incident/{inc_id}")
+    r = client.post(f"/assistant/{inc_id}/ask", data={"question": "Is this malicious?", "csrf_token": t},
+                    headers={"X-Stream": "1"})
+    assert r.status_code == 200 and r.mimetype == "text/plain"
+    assert r.get_data(as_text=True) == "Looks like a local test. " + XSS          # streamed as plain text
+    # the model saw the incident facts inside the untrusted-data block, plus the question
+    user_msg = FakeLLM.sent[-1][-1]["content"]
+    assert user_msg.startswith("<soc_data>") and inc_id in user_msg and "Is this malicious?" in user_msg
+    assert "cannot approve" in FakeLLM.sent[-1][0]["content"]
+    # both turns are stored and shown, escaped
+    page = client.get(f"/incident/{inc_id}").get_data(as_text=True)
+    assert "Is this malicious?" in page and "a local test." in page and XSS not in page
+    # asking the AI never changes proposals or the audit log
+    assert [(p["id"], p["status"]) for p in get_proposals(connect(db), inc_id)] == before
+    assert not [e for e in audit_entries(connect(db)) if "assistant" in e["event"] or e["actor"] == "fake-model"]
+
+
+def test_assistant_works_without_javascript_and_from_suggestion_button(env):
+    client, db, inc_id = env
+    t = token(client, f"/incident/{inc_id}")
+    # textarea empty + suggestion button value: both are named "question"
+    r = client.post(f"/assistant/{inc_id}/ask", data={"question": ["", "What should I check before approving?"],
+                                                     "csrf_token": t})
+    assert r.status_code == 302 and r.headers["Location"].endswith("#assistant")
+    page = client.get(f"/incident/{inc_id}").get_data(as_text=True)
+    assert "What should I check before approving?" in page and "Looks like" in page
+
+
+def test_assistant_overview_scope_and_history_is_sent_back(env):
+    client, _, inc_id = env
+    FakeLLM.sent.clear()
+    t = token(client)
+    client.post("/assistant/overview/ask", data={"question": "first", "csrf_token": t}, headers={"X-Stream": "1"}).get_data()
+    client.post("/assistant/overview/ask", data={"question": "second", "csrf_token": t}, headers={"X-Stream": "1"}).get_data()
+    last = FakeLLM.sent[-1]
+    assert [m["role"] for m in last] == ["system", "user", "assistant", "user"]   # earlier turn included
+    assert inc_id in last[-1]["content"] and "Open incidents: 1" in last[-1]["content"]
+
+
+def test_assistant_rejects_bad_input(env):
+    client, _, _ = env
+    t = token(client)
+    assert client.post("/assistant/overview/ask", data={"question": "hi"}).status_code == 400          # no CSRF token
+    assert client.post("/assistant/INC-nope/ask", data={"question": "hi", "csrf_token": t}).status_code == 404
+    r = client.post("/assistant/overview/ask", data={"question": "  ", "csrf_token": t}, headers={"X-Stream": "1"})
+    assert r.status_code == 400
+
+
+def test_assistant_failure_is_reported_and_not_stored(env, monkeypatch):
+    client, db, _ = env
+
+    def broken(self, messages):
+        raise ConnectionError("Ollama unreachable")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(FakeLLM, "stream", broken)
+    t = token(client)
+    body = client.post("/assistant/overview/ask", data={"question": "hi", "csrf_token": t},
+                       headers={"X-Stream": "1"}).get_data(as_text=True)
+    assert "[assistant unavailable: Ollama unreachable]" in body
+    from soc.agent.store import chat_history
+    assert [m["role"] for m in chat_history(connect(db), "overview")] == ["user"]
+
+
+def test_pages_show_ai_status_and_load_only_same_origin_script(env):
+    client, _, _ = env
+    page = client.get("/").get_data(as_text=True)
+    assert "fake-model online" in page and 'src="/static/assistant.js"' in page
+    assert "<script>" not in page and "style=" not in page        # no inline script/style: CSP stays strict

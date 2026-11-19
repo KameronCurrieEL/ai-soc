@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS alerts (
     decision    TEXT NOT NULL                      -- JSON: priority, reasons, proposals
 );
 CREATE INDEX IF NOT EXISTS alerts_ts ON alerts (timestamp);
+CREATE TABLE IF NOT EXISTS chat_messages (             -- assistant conversations: advice, not decisions
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope       TEXT NOT NULL,                     -- incident id, or 'overview' for the queue
+    role        TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    actor       TEXT NOT NULL,                     -- analyst name, or the model name
+    content     TEXT NOT NULL,
+    at          TEXT NOT NULL,
+    duration_s  REAL
+);
+CREATE INDEX IF NOT EXISTS chat_scope ON chat_messages (scope, id);
 CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
@@ -137,6 +147,19 @@ def get_alerts(conn: sqlite3.Connection, ids: list[str]) -> list[sqlite3.Row]:
 def recent_alerts(conn: sqlite3.Connection, hours: int = 24) -> list[sqlite3.Row]:
     cutoff = wazuh_ts(datetime.now(timezone.utc) - timedelta(hours=hours))
     return conn.execute("SELECT * FROM alerts WHERE timestamp >= ? ORDER BY timestamp", (cutoff,)).fetchall()
+
+
+def save_chat(conn: sqlite3.Connection, scope: str, role: str, actor: str, content: str,
+              duration_s: float | None = None) -> None:
+    with conn:
+        conn.execute("INSERT INTO chat_messages (scope, role, actor, content, at, duration_s) VALUES (?, ?, ?, ?, ?, ?)",
+                     (scope, role, actor, content, now(), duration_s))
+
+
+def chat_history(conn: sqlite3.Connection, scope: str, limit: int = 30) -> list[sqlite3.Row]:
+    """Most recent messages of one conversation, oldest first."""
+    rows = conn.execute("SELECT * FROM chat_messages WHERE scope = ? ORDER BY id DESC LIMIT ?", (scope, limit)).fetchall()
+    return list(reversed(rows))
 
 
 def audit(conn: sqlite3.Connection, actor: str, event: str, incident_id: str | None = None,
