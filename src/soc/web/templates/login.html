@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · AI-SOC Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+  <main class="login-wrap">
+    <form class="login-card" method="post" action="{{ url_for('login_post') }}">
+      <div class="login-brand">
+        <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path class="brand-mark" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path class="brand-check" d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+        <div><strong>AI-SOC</strong><span>Analyst console</span></div>
+      </div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+      {% endwith %}
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Username<input name="username" autocomplete="username" autofocus required maxlength="40"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+      <p class="login-note">Local lab · bound to 127.0.0.1 · every action is attributed to your account.</p>
+    </form>
+  </main>
+</body>
+</html>

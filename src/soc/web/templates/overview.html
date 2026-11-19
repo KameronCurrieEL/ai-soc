@@ -9,12 +9,12 @@
     <p class="meta">{% if last_run %}Last pipeline run {{ last_run['at'][:16] | replace('T', ' ') }} UTC{% else %}No pipeline run yet{% endif %}
       · <a href="{{ url_for('index') }}">go to incident queue</a></p>
   </div>
-  <form method="post" action="{{ url_for('run') }}">
+  {% if can_act %}<form method="post" action="{{ url_for('run') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button class="btn btn-primary" type="submit">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
       Refresh from Wazuh</button>
-  </form>
+  </form>{% endif %}
 </section>
 
 <section class="kpis">

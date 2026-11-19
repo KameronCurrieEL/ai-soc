@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block crumbs %}<strong>Users</strong>{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Users &amp; roles</h1>
+    <p class="meta">viewer = read only · analyst = + approve / respond / autopilot · admin = + manage users</p>
+  </div>
+</section>
+
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th>Username</th><th>Role</th><th>Tenant</th><th>Last login (UTC)</th><th>Change role</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr>
+    <td><strong>{{ u['username'] }}</strong></td>
+    <td><span class="tag">{{ u['role'] }}</span></td>
+    <td class="mono">{{ u['tenant'] }}</td>
+    <td class="mono">{{ (u['last_login'] or '–')[:16] | replace('T', ' ') }}</td>
+    <td>
+      <form method="post" action="{{ url_for('users_role') }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="username" value="{{ u['username'] }}">
+        <select name="role" aria-label="Role for {{ u['username'] }}">
+          {% for r in roles %}<option value="{{ r }}" {{ 'selected' if u['role'] == r }}>{{ r }}</option>{% endfor %}
+        </select>
+        <button class="btn" type="submit">Set</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<section class="card">
+  <h2>Add user</h2>
+  <form method="post" action="{{ url_for('users_add') }}" class="actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input name="username" placeholder="username" required maxlength="40" aria-label="Username">
+    <select name="role" aria-label="Role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select>
+    <input name="password" type="password" placeholder="password (min 8 chars)" required aria-label="Password">
+    <button class="btn btn-primary" type="submit">Create user</button>
+  </form>
+</section>
+{% endblock %}

@@ -99,6 +99,15 @@ CREATE TABLE IF NOT EXISTS settings (                   -- small key/value (e.g.
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (                      -- console accounts (auth + RBAC)
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    username    TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    pw_hash     TEXT NOT NULL,                      -- pbkdf2$<iters>$<salt_hex>$<hash_hex>
+    role        TEXT NOT NULL DEFAULT 'viewer',     -- viewer | analyst | admin
+    tenant      TEXT NOT NULL DEFAULT 'default',    -- groundwork for per-tenant isolation (C2)
+    created_at  TEXT NOT NULL,
+    last_login  TEXT
+);
 CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
@@ -355,3 +364,39 @@ def audit_entries(conn: sqlite3.Connection, incident_id: str | None = None, limi
         return conn.execute("SELECT * FROM audit_log WHERE incident_id = ? ORDER BY id DESC LIMIT ?",
                             (incident_id, limit)).fetchall()
     return conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+# ---------- users (auth / RBAC) ----------
+
+def create_user(conn: sqlite3.Connection, username: str, pw_hash: str, role: str, tenant: str = "default") -> int:
+    with conn:
+        cur = conn.execute("INSERT INTO users (username, pw_hash, role, tenant, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (username, pw_hash, role, tenant, now()))
+    return cur.lastrowid
+
+
+def get_user(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
+
+
+def list_users(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM users ORDER BY username").fetchall()
+
+
+def count_users(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
+
+
+def set_user_password(conn: sqlite3.Connection, username: str, pw_hash: str) -> None:
+    with conn:
+        conn.execute("UPDATE users SET pw_hash = ? WHERE username = ? COLLATE NOCASE", (pw_hash, username))
+
+
+def set_user_role(conn: sqlite3.Connection, username: str, role: str) -> None:
+    with conn:
+        conn.execute("UPDATE users SET role = ? WHERE username = ? COLLATE NOCASE", (role, username))
+
+
+def touch_login(conn: sqlite3.Connection, username: str) -> None:
+    with conn:
+        conn.execute("UPDATE users SET last_login = ? WHERE username = ? COLLATE NOCASE", (now(), username))

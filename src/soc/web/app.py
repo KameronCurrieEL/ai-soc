@@ -30,6 +30,7 @@ from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_t
 
 from soc.agent import approval, insights, store
 from soc.ai import assistant, responder
+from soc.web import auth
 from soc.enrich import geoip
 from soc.web import charts
 from soc.parsing.schema import ip_scope
@@ -82,9 +83,15 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     @app.context_processor
     def inject() -> dict:
+        u = auth.current_user()
+        if not u:   # login page: keep it light, no DB/model calls
+            return {"csrf_token": csrf_token(), "user": None}
         ok, label = ai_status()
-        return {"csrf_token": csrf_token(), "analyst": session.get("analyst", ""), "ai_ok": ok, "ai_label": label,
+        return {"csrf_token": csrf_token(), "user": u, "analyst": u["name"], "can_act": auth.has_role("analyst"),
+                "is_admin": auth.has_role("admin"), "ai_ok": ok, "ai_label": label,
                 "nav": request.endpoint, "autopilot": store.get_setting(db(), "autopilot", "off") == "on"}
+
+    PUBLIC_ENDPOINTS = {"login", "login_post", "static"}
 
     @app.before_request
     def security_checks() -> None:
@@ -96,6 +103,10 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
             expected = session.get("csrf", "")
             if not sent or not expected or not hmac.compare_digest(sent, expected):
                 abort(400, "CSRF token missing or invalid: reload the page and try again")
+        if request.endpoint not in PUBLIC_ENDPOINTS and not auth.current_user():
+            if request.path.startswith("/api/"):
+                abort(401)
+            return redirect(url_for("login"))
 
     @app.after_request
     def add_headers(resp):
@@ -265,13 +276,77 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def audit_view():
         return render_template("audit.html", entries=store.audit_entries(db(), limit=300))
 
+    # ---------- auth ----------
+
+    @app.get("/login")
+    def login():
+        if auth.current_user():
+            return redirect(url_for("overview"))
+        return render_template("login.html")
+
+    @app.post("/login")
+    def login_post():
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = auth.authenticate(db(), username, password)
+        if not user:
+            flash("Invalid username or password.", "error")
+            return redirect(url_for("login"))
+        auth.login_user(user)
+        store.touch_login(db(), user["username"])
+        session.permanent = False
+        nxt = session.pop("next", None)
+        return redirect(nxt or url_for("overview"))
+
+    @app.post("/logout")
+    def logout():
+        auth.logout_user()
+        flash("Signed out.", "ok")
+        return redirect(url_for("login"))
+
+    @app.get("/users")
+    @auth.require_role("admin")
+    def users():
+        return render_template("users.html", users=store.list_users(db()), roles=auth.ROLES)
+
+    @app.post("/users/add")
+    @auth.require_role("admin")
+    def users_add():
+        name, role = request.form.get("username", "").strip(), request.form.get("role", "viewer")
+        pw = request.form.get("password", "")
+        if not auth.valid_username(name) or role not in auth.ROLES or len(pw) < 8:
+            flash("Need a valid username, a role, and a password of at least 8 characters.", "error")
+        elif store.get_user(db(), name):
+            flash(f"User {name!r} already exists.", "error")
+        else:
+            store.create_user(db(), name, auth.hash_password(pw), role)
+            with db() as c:
+                store.audit(c, actor(), "user_created", note=f"{name} ({role})")
+            flash(f"Created user {name} ({role}).", "ok")
+        return redirect(url_for("users"))
+
+    @app.post("/users/role")
+    @auth.require_role("admin")
+    def users_role():
+        name, role = request.form.get("username", "").strip(), request.form.get("role", "")
+        if role in auth.ROLES and store.get_user(db(), name):
+            store.set_user_role(db(), name, role)
+            with db() as c:
+                store.audit(c, actor(), "user_role_changed", note=f"{name} -> {role}")
+            flash(f"{name} is now {role}.", "ok")
+        return redirect(url_for("users"))
+
     # ---------- actions (POST only, CSRF-checked above) ----------
 
-    def remember_analyst() -> str:
-        name = request.form.get("by", "").strip()[:40]
-        if name:
-            session["analyst"] = name
-        return name
+    def actor() -> str:
+        """The audit actor is the logged-in user — not a value the browser can set."""
+        u = auth.current_user()
+        return u["name"] if u else ""
+
+    def deny_viewer():
+        """Block state-changing actions for viewers (read-only role)."""
+        if not auth.has_role("analyst"):
+            abort(403)
 
     def do(fn, success: str):
         try:
@@ -283,11 +358,12 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     @app.post("/proposal/<int:pid>/<verb>")
     def proposal_action(pid: int, verb: str):
+        deny_viewer()
         conn = db()
         p = store.get_proposal(conn, pid)
         if p is None:
             abort(404)
-        by = remember_analyst()
+        by = actor()
         if verb == "approve":
             do(lambda: approval.approve(conn, pid, by, request.form.get("note", "")), f"Proposal #{pid} approved")
         elif verb == "reject":
@@ -300,7 +376,8 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     @app.post("/incident/<inc_id>/close")
     def close(inc_id: str):
-        by = remember_analyst()
+        deny_viewer()
+        by = actor()
         do(lambda: approval.close_incident(db(), inc_id, by, request.form.get("note", ""),
                                            request.form.get("verdict", "")), f"{inc_id} closed")
         return redirect(url_for("incident", inc_id=inc_id))
@@ -309,6 +386,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def respond(inc_id: str):
         """Run the responder agent: store its assessment and add its (vetted) suggested proposals.
         It never approves or executes; its proposals still need you."""
+        deny_viewer()
         conn = db()
         r = store.get_incident(conn, inc_id)
         if r is None:
@@ -338,11 +416,12 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     @app.post("/autopilot")
     def autopilot_toggle():
+        deny_viewer()
         want = "on" if request.form.get("enabled") == "on" else "off"
         conn = db()
         store.set_setting(conn, "autopilot", want)
         with conn:
-            store.audit(conn, remember_analyst() or "analyst", "autopilot_" + ("enabled" if want == "on" else "disabled"))
+            store.audit(conn, actor(), "autopilot_" + ("enabled" if want == "on" else "disabled"))
         flash(f"Autopilot {'ENABLED' if want == 'on' else 'disabled'}. "
               + ("Rule-critical incidents will be auto-contained (dry-run) on the next run." if want == "on"
                  else "Nothing acts without your approval."), "ok" if want == "off" else "error")
@@ -374,7 +453,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
             flash("Type a question first.", "error")
             return redirect(back + "#assistant")
         messages = assistant.build_messages(context, store.chat_history(conn, scope, limit=assistant.HISTORY_TURNS), question)
-        store.save_chat(conn, scope, "user", session.get("analyst") or "analyst", question)
+        store.save_chat(conn, scope, "user", actor() or "analyst", question)
 
         def generate():
             parts: list[str] = []
@@ -403,6 +482,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     @app.post("/run")
     def run():
+        deny_viewer()
         runner = pipeline_runner or _default_runner
         try:
             stats = runner(db())
@@ -465,6 +545,10 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Local SOC dashboard (127.0.0.1 only)")
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = p.parse_args(argv)
+    with store.connect() as conn:          # first run: create an admin so the owner can log in
+        msg = auth.ensure_seed_admin(conn)
+    if msg:
+        print(msg)
     print(f"SOC dashboard on http://localhost:{args.port}  (localhost only; Ctrl+C to stop)")
     create_app().run(host="127.0.0.1", port=args.port, debug=False)  # never debug=True: it allows code execution
     return 0

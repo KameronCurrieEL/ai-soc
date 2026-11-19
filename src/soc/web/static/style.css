@@ -357,3 +357,27 @@ table.feed tr.row-new { animation: flash-in 2.5s ease-out; }
 .sources .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 .sources .s-count { font-weight: 700; font-variant-numeric: tabular-nums; }
 .sources .s-last { font-size: 11.5px; }
+
+/* ---------- auth (login + user menu) ---------- */
+.login-body { display: grid; place-items: center; min-height: 100vh; background:
+  radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent), var(--bg); }
+.login-wrap { width: 100%; max-width: 360px; padding: 20px; }
+.login-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px;
+              box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; }
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.login-brand strong { display: block; font-size: 1.15rem; }
+.login-brand span { color: var(--muted); font-size: 12px; }
+.login-brand .brand-mark { stroke: var(--accent); fill: color-mix(in srgb, var(--accent) 18%, transparent); }
+.login-brand .brand-check { stroke: var(--accent); stroke-width: 2.2; }
+.login-card label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); }
+.login-card input { width: 100%; }
+.login-card .btn { margin-top: 6px; justify-content: center; }
+.login-note { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; text-align: center; }
+
+.whoami { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; flex-wrap: wrap; }
+.whoami .dot-user { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.role-tag { font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+            border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 6px; }
+.linklike { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; padding: 0; margin-left: auto; }
+.linklike:hover { text-decoration: underline; }
+form.inline { display: inline-flex; gap: 6px; align-items: center; margin: 0; }

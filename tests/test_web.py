@@ -4,9 +4,10 @@ import pytest
 
 from soc.agent.incidents import Incident
 from soc.agent.pipeline import RunStats
-from soc.agent.store import audit_entries, connect, get_proposals, save_incidents
+from soc.agent.store import audit_entries, connect, create_user, get_proposals, save_incidents
 from soc.decision.models import Proposal
 from soc.web.app import create_app
+from soc.web.auth import hash_password
 
 XSS = "<script>alert(1)</script>"
 
@@ -37,6 +38,23 @@ class FakeResponder:
         })
 
 
+def make_client(db, role="analyst", name="kameron", login=True):
+    """A test client, logged in as `role` unless login=False. Seeds the user if needed."""
+    conn = connect(db)
+    if not conn.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone():
+        create_user(conn, name, hash_password("pw-" + name), role)
+    conn.close()
+    app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}),
+                     llm_factory=FakeLLM, responder_factory=FakeResponder,
+                     ai_status=lambda: (True, "fake-model online"))
+    app.config["TESTING"] = True
+    client = app.test_client()
+    if login:
+        t = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/login").get_data(as_text=True)).group(1)
+        client.post("/login", data={"username": name, "password": "pw-" + name, "csrf_token": t})
+    return client
+
+
 @pytest.fixture
 def env(tmp_path):
     db = tmp_path / "soc.db"
@@ -46,11 +64,7 @@ def env(tmp_path):
                             Proposal("investigate", XSS, "high", "brute_force", "why")], [], [])
     save_incidents(conn, [inc])
     conn.close()
-    app = create_app(db, pipeline_runner=lambda c: RunStats(alerts=3, incidents=1, saved={"new": 0}),
-                     llm_factory=FakeLLM, responder_factory=FakeResponder,
-                     ai_status=lambda: (True, "fake-model online"))
-    app.config["TESTING"] = True
-    return app.test_client(), db, inc.id
+    return make_client(db, role="analyst"), db, inc.id
 
 
 def token(client, path="/"):

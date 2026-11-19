@@ -26,8 +26,20 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Detection quality</a>
       <a href="{{ url_for('audit_view') }}" class="{{ 'active' if nav == 'audit_view' }}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg>Audit log</a>
+      {% if is_admin %}<a href="{{ url_for('users') }}" class="{{ 'active' if nav in ('users',) }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20a6 6 0 0 1 12 0M17 11l2 2 4-4"/></svg>Users</a>{% endif %}
     </nav>
     <div class="side-foot">
+      {% if user %}
+      <div class="whoami">
+        <span class="dot-user"></span><strong>{{ user.name }}</strong><span class="role-tag">{{ user.role }}</span>
+        <form method="post" action="{{ url_for('logout') }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="linklike" type="submit">sign out</button>
+        </form>
+      </div>
+      {% endif %}
+      {% if can_act %}
       <form class="autopilot-toggle" method="post" action="{{ url_for('autopilot_toggle') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="enabled" value="{{ 'off' if autopilot else 'on' }}">
@@ -36,7 +48,8 @@
                 title="When ON, rule-critical incidents are contained automatically (dry-run) while you're away">
           Autopilot: <strong>{{ 'ON' if autopilot else 'OFF' }}</strong></button>
       </form>
-      <p>Bound to 127.0.0.1. Every action needs a named approver (or 'autopilot' for rule-critical incidents) and is written to an append-only audit log.</p>
+      {% else %}<span class="mode">DRY-RUN</span>{% endif %}
+      <p>Bound to 127.0.0.1. Every action is attributed to your account and written to an append-only audit log.</p>
     </div>
   </aside>
 
