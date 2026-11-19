@@ -63,3 +63,18 @@ Eval set of 16 owner-reviewed cases. qwen2.5:3b: 100% valid JSON, 62% exact seve
 - Same named-approver rule and audit log as the CLI.
 
 **Consequences.** Adds one runtime dependency (+ its 6 sub-dependencies). The Flask dev server is fine for a single local user but not for a shared deployment; that would need a production WSGI server, HTTPS and real authentication (out of scope for the lab).
+
+---
+
+## D4 (2026-11-19): Offline GeoIP (DB-IP Country Lite), not a geolocation web API
+
+**Context.** The incident page should say roughly where an attack came from.
+
+**Decision.** Classify the address first (loopback / private / reserved / public, recomputed with `ip_scope`). Only public addresses get a country, looked up locally in DB-IP's free "IP to Country Lite" CSV (CC BY 4.0, ~4.5 MB, downloaded by `make geoip`, gitignored). Lookup is a binary search (`bisect`) over ~730k sorted ranges. Stdlib only.
+
+**Why.**
+- A web API (ipinfo, ip-api, ...) would be a cloud call (project rule) and would send attacker IPs to a third party, which can tip off an attacker who watches lookups of their own infrastructure.
+- Non-public addresses have no meaningful location; showing "This computer" for `::1` is more useful than a country, and a database can't override that (tested with a deliberately wrong database).
+- Country-level, not city: city data is ~25x larger and gives false precision.
+
+**Consequences.** Location is approximate and says so on the page (VPN/Tor/cloud/anycast: e.g. 1.1.1.1 shows Australia). The database needs a monthly re-download to stay current. Loading takes ~6 s, so the page only loads it when an incident has a public IP. Attribution is shown whenever a country is displayed (license requirement).

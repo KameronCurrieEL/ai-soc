@@ -112,3 +112,46 @@ def test_close_in_browser_requires_verdict_and_records_it(env):
                 data={"by": "kameron", "note": "lab test", "verdict": "benign", "csrf_token": t})
     closed = [e for e in audit_entries(connect(db)) if e["event"] == "incident_closed"]
     assert len(closed) == 1 and closed[0]["actor"] == "kameron" and '"benign"' in closed[0]["detail"]
+
+
+def _store_alert(db, alert_id, ip, scope, user, ts="2026-11-17T10:00:30.000+0000"):
+    import json as _json
+    data = {"id": alert_id, "timestamp": ts, "source": "soc_correlation", "rule_id": "soc-burst",
+            "description": "Burst of failed logons", "agent_name": "windows-host", "user": user,
+            "src_ip": ip, "src_ip_scope": scope, "mitre_ids": ["T1110"], "related_count": 12,
+            "details": {"host": "WIN-LAB01"}}
+    conn = connect(db)
+    with conn:
+        conn.execute("INSERT INTO alerts VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     (alert_id, ts, "soc_correlation", "soc-burst", "high", data["description"], "windows-host",
+                      user, ip, _json.dumps(data), "{}"))
+
+
+def _incident(db, key, ip_alert_id):
+    inc = Incident(key, "Brute force", "high", "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000",
+                   [ip_alert_id], [Proposal("investigate", "x", "high", "brute_force", "why")], [], [])
+    save_incidents(connect(db), [inc])
+    return inc.id
+
+
+def test_incident_page_shows_summary_location_timeline(env, monkeypatch):
+    from soc.enrich import geoip
+    monkeypatch.setattr(geoip, "default_db", lambda: geoip.GeoDB([("8.8.8.0", "8.8.8.255", "US")]))
+    client, db, _ = env
+    _store_alert(db, "b1", "8.8.8.8", "public", XSS)
+    inc_id = _incident(db, "brute_force|8.8.8.8@windows-host", "b1")
+    page = client.get(f"/incident/{inc_id}").get_data(as_text=True)
+    assert "United States (US)" in page and "DB-IP" in page              # location + required attribution
+    assert "blocking that address is proposed" in page                     # plain-English summary
+    assert "Incident opened by the pipeline" in page and "WIN-LAB01" in page   # timeline + host
+    assert XSS not in page and "&lt;script&gt;" in page                    # username from logs escaped
+
+
+def test_old_incident_without_stored_alerts_falls_back_to_key(env, monkeypatch):
+    from soc.enrich import geoip
+    monkeypatch.setattr(geoip, "default_db", lambda: pytest.fail("no public IP: database must not load"))
+    client, db, _ = env
+    inc_id = _incident(db, "brute_force|::1@windows-host", "never-stored")
+    page = client.get(f"/incident/{inc_id}").get_data(as_text=True)
+    assert "This computer (windows-host)" in page and "weren't stored" in page
+    assert "DB-IP" not in page

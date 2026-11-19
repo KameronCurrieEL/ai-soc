@@ -41,8 +41,9 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - src/soc/response/actions.py: strict target validation (command injection), PowerShell command + rollback per action, dry-run only (live execution raises).
   - Live: 1000 alerts -> 5 decisions -> 2 incidents, 5 AI calls (pre-filter). Owner handled both in the CLI: rejected agent-stop (planned restart), approved + dry-run executed the brute-force investigation, closed both. Audit log shows every step with actor + reason.
 - Phase 7b Web dashboard: DONE 2026-11-17 (commit 51a72dc). Flask + Jinja2 autoescape, no JS, strict CSP, CSRF token on every POST, Host-header check (DNS rebinding), 127.0.0.1 only. Decision D3.
-- Phase 7c Analyst views: IN PROGRESS. 219 tests pass.
+- Phase 7c Analyst views: IN PROGRESS. 234 tests pass.
   - Step 1 DONE 2026-11-19: close needs a verdict (true_positive | benign | false_positive), stored on the incident + audit log, CLI `--verdict` and web dropdown. Pipeline stores normalized alerts + decisions in SQLite (alerts table, 7-day retention). src/soc/agent/insights.py: timeline, entities, plain_summary, activity (pure functions, tested, not yet in the UI).
+  - Step 2 DONE 2026-11-19: incident page shows plain-English summary, Where (affected host + source location), Involved entities, timeline (alerts + audit), raw audit collapsed. src/soc/enrich/geoip.py: offline IP -> country (DB-IP Lite via `make geoip`, bisect, scope checked first). Decision D4. Old incidents (no stored alerts) fall back to the incident key.
 - Phase 8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
@@ -65,6 +66,7 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Keep qwen2.5:3b or test a larger local model? Eval harness is ready: `OLLAMA_MODEL=qwen2.5:7b make eval` (needs `ollama pull` on Windows; ~2x slower on CPU).
 
 ## Known issues / gotchas
+- GeoIP is country-level and approximate: anycast/cloud/VPN IPs show the network's registration country (1.1.1.1 -> Australia). Re-run `make geoip` monthly.
 - /etc/resolv.conf nameserver (10.255.255.254) is WSL's DNS-tunneling proxy, NOT the Windows host. Windows host = WSL default gateway (`ip route`, or /proc/net/route). checks.py auto-detects it.
 - Ollama on Windows binds to 127.0.0.1 by default -> unreachable from WSL. Needs OLLAMA_HOST=0.0.0.0 + Windows Firewall allow on TCP 11434.
 - `docker` CLI present doesn't mean the daemon is up: check with `docker info`, not `docker --version`.
@@ -93,7 +95,8 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 7c step 2: show insights in the dashboard. Incident page: plain-English summary on top, timeline (alerts + audit events), entity list with pivot links (`/entity/<type>/<value>` -> matching alerts + incidents). Index page: 24h activity bar chart (server-rendered, no JS, CSP stays strict). Then step 3: verdict stats (false-positive rate per rule) as detection-quality metric.
+Phase 7c step 3: entity pivot page `/entity/<type>/<value>` (all stored alerts + incidents with that user/IP/host) and link the Involved/Where values to it. Then the 24h activity chart on the index page, then verdict stats (false-positive rate per rule).
+To see summary/Involved filled in: run the pipeline once so alerts get stored (`make soc ARGS="run --last 72h"` or Refresh in the dashboard).
 Session start: `make check && make wazuh-up && make wazuh-check`, then `make soc ARGS="run --last 24h"`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 

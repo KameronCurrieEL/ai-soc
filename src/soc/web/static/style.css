@@ -84,7 +84,33 @@ input[name="note"], input[name="reason"] { flex: 1; min-width: 160px; }
 .flash-ok { border-color: var(--ok); color: var(--ok); }
 .flash-error { border-color: var(--no); color: var(--no); }
 
+
+h3 { font-size: .9rem; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.summary p { margin: 0; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; }
+.loc + .loc { border-top: 1px solid var(--line); padding-top: 8px; }
+.loc-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.loc p { margin: 4px 0 8px; font-size: 13px; }
+.scope { font: 600 11px var(--mono); text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.sc-public { color: var(--high); border-color: var(--high); }
+.attrib { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+
+.timeline { list-style: none; margin: 0 0 12px; padding: 0 0 0 4px; border-left: 2px solid var(--line); }
+.timeline li { display: grid; grid-template-columns: 11rem 1fr; gap: 12px; padding: 6px 0 6px 14px; position: relative; }
+.timeline li::before { content: ""; position: absolute; left: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%;
+                       background: var(--muted); border: 2px solid var(--bg); }
+.timeline .tl-alert::before { background: var(--high); }
+.timeline .tl-human::before { background: var(--ok); }
+.timeline time { font: 12px var(--mono); color: var(--muted); padding-top: 2px; }
+.timeline .detail { font-size: 13px; overflow-wrap: anywhere; }
+select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+details.raw { margin-top: 24px; }
+details.raw summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+
 @media (max-width: 720px) {
+  .timeline li { grid-template-columns: 1fr; gap: 2px; }
   .grid { grid-template-columns: 1fr; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .list th:nth-child(3), .list td:nth-child(3), .list th:nth-child(5), .list td:nth-child(5) { display: none; }

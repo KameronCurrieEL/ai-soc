@@ -25,7 +25,9 @@ from pathlib import Path
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
 
-from soc.agent import approval, store
+from soc.agent import approval, insights, store
+from soc.enrich import geoip
+from soc.parsing.schema import ip_scope
 from soc.response.actions import InvalidTarget, plan
 
 ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
@@ -116,8 +118,18 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None) -> Fla
             except InvalidTarget as exc:
                 preview, error = None, str(exc)
             proposals.append({"row": p, "plan": preview, "error": error})
-        return render_template("incident.html", inc=r, proposals=proposals, verdicts=approval.VERDICTS,
-                               audit=list(reversed(store.audit_entries(conn, inc_id, limit=200))))
+        alert_rows = store.get_alerts(conn, json.loads(r["alert_ids"]))
+        audit_rows = list(reversed(store.audit_entries(conn, inc_id, limit=200)))
+        hosts, ips = insights.hosts_and_ips(r, alert_rows)
+        # Loading the GeoIP database takes seconds: only do it when there is a public IP to look up.
+        geo_db = geoip.default_db() if any(ip_scope(ip) == "public" for ip in ips) else None
+        locations = [geoip.locate(ip, hosts[0] if hosts else None, geo_db) for ip in ips]
+        involved = {k: v for k, v in insights.entities(alert_rows).items() if k not in ("host", "ip")}
+        return render_template(
+            "incident.html", inc=r, proposals=proposals, verdicts=approval.VERDICTS, audit=audit_rows,
+            summary=insights.plain_summary(r, alert_rows) if alert_rows else None,
+            hosts=hosts, locations=locations, involved=involved, geo_attribution=geoip.ATTRIBUTION,
+            timeline=insights.timeline(alert_rows, audit_rows))
 
     @app.get("/audit")
     def audit_view():

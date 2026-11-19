@@ -10,6 +10,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from soc.parsing.schema import ip_scope
+
 PRIORITY_ORDER = ("low", "medium", "high", "critical")
 
 # Entity types an analyst pivots on. label, how to read it from a normalized alert dict.
@@ -64,6 +66,20 @@ def entities(alert_rows: list) -> dict[str, list[Entity]]:
         if counts:
             out[etype] = [Entity(etype, label, v, n, notes.get(v, "")) for v, n in counts.most_common()]
     return out
+
+
+def hosts_and_ips(incident, alert_rows: list) -> tuple[list[str], list[str]]:
+    """Affected hosts and source IPs (most frequent first).
+
+    Incidents saved before alerts were stored have no alert rows: fall back to the incident
+    key "family|entity@agent", whose entity is the source IP for logon incidents.
+    """
+    if alert_rows:
+        ents = entities(alert_rows)
+        return [e.value for e in ents.get("host", [])], [e.value for e in ents.get("ip", [])]
+    _, _, rest = incident["key"].partition("|")
+    entity, _, agent = rest.rpartition("@")
+    return ([agent] if agent else []), ([entity] if ip_scope(entity) else [])
 
 
 def matches_entity(alert: dict, etype: str, value: str) -> bool:

@@ -11,6 +11,43 @@
   </div>
 </section>
 
+<section class="card summary">
+  <h2>What happened <small class="muted">built from parsed alert fields, no AI</small></h2>
+  {% if summary %}<p>{{ summary }}</p>
+  {% else %}<p class="muted">Alert details weren't stored for this incident (it was created before alert storage).
+    New pipeline runs store them.</p>{% endif %}
+</section>
+
+<div class="grid">
+  <section class="card where">
+    <h2>Where</h2>
+    <dl class="kv">
+      <dt>Affected host</dt>
+      <dd>{% for h in hosts %}<code>{{ h }}</code>{% if not loop.last %}, {% endif %}{% else %}<span class="muted">unknown</span>{% endfor %}</dd>
+    </dl>
+    <h3>Came from</h3>
+    {% for loc in locations %}
+    <div class="loc">
+      <div class="loc-head"><strong>{{ loc.place }}</strong> <code class="target">{{ loc.ip }}</code>
+        <span class="scope sc-{{ loc.scope }}">{{ loc.scope }}</span></div>
+      <p class="muted">{{ loc.explanation }}</p>
+    </div>
+    {% else %}<p class="muted">No source IP in these alerts (e.g. a local event like a service stopping).</p>{% endfor %}
+    {% if locations | selectattr('country_code') | list %}<p class="attrib">{{ geo_attribution }}</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Involved</h2>
+    {% if involved %}
+    <dl class="kv">
+      {% for etype, ents in involved.items() %}
+      <dt>{{ ents[0].label }}</dt>
+      <dd>{% for e in ents %}<code>{{ e.value }}</code>{% if e.count > 1 %} <small class="muted">×{{ e.count }}</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
+      {% endfor %}
+    </dl>
+    {% else %}<p class="muted">No stored alert details.</p>{% endif %}
+  </section>
+</div>
+
 <div class="grid">
   <section class="card">
     <h2>Why: deterministic rules</h2>
@@ -24,6 +61,21 @@
     {% else %}<p class="muted">Not analyzed (run <code>make soc ARGS="run --ai"</code> to include the AI).</p>{% endif %}
   </section>
 </div>
+
+<h2>Timeline <small class="muted">alerts and what was done about them, UTC</small></h2>
+<ol class="timeline">
+  {% for t in timeline %}
+  <li class="tl-{{ t.kind }}">
+    <time>{{ t.at.strftime('%b %d %H:%M:%S') }}{% if t.until %} &ndash; {{ t.until.strftime('%H:%M:%S') }}{% endif %}</time>
+    <div>
+      <strong>{% if t.count > 1 %}{{ t.count }}&times; {% endif %}{{ t.title }}</strong>
+      {% if t.priority %}<span class="badge b-{{ t.priority }}">{{ t.priority }}</span>{% endif %}
+      {% if t.actor %}<span class="muted">by {{ t.actor }}</span>{% endif %}
+      {% if t.detail %}<div class="detail">{{ t.detail }}</div>{% endif %}
+    </div>
+  </li>
+  {% else %}<li class="muted">Nothing recorded yet.</li>{% endfor %}
+</ol>
 
 <h2>Proposals</h2>
 <p class="muted">Targets come from log data an attacker may control; they are shown as plain text and validated before any command is built.</p>
@@ -92,6 +144,8 @@
 </section>
 {% endif %}
 
-<h2>Audit trail</h2>
-{% include "_audit_table.html" %}
+<details class="raw">
+  <summary>Raw audit trail ({{ audit | length }} entries)</summary>
+  {% include "_audit_table.html" %}
+</details>
 {% endblock %}
