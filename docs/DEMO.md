@@ -21,7 +21,7 @@ make check            # python / docker / ollama all [OK]
 make wazuh-up         # starts manager, indexer, dashboard
 make wazuh-check      # wait ~1 min after start; HTTP 500 at first is normal (see Troubleshooting)
 make agents           # 001 windows-host ... active
-make test             # 262 passed: proves the code before you touch live data
+make test             # 258 passed: proves the code before you touch live data
 make web              # leave this terminal open
 ```
 
