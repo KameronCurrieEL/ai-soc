@@ -1,5 +1,5 @@
 # PROJECT_STATE.md
-Last updated: 2026-11-19
+Last updated: 2026-11-19 (Phase 8)
 
 ## Goal
 AI-assisted SOC: Wazuh -> Python -> AI Analyst -> Decision Engine -> SOC Agent -> Human Approval -> Response
@@ -48,7 +48,8 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - Home: 24h stacked SVG activity chart (no JS; one-hue priority ramp checked with the dataviz validator, light + dark; table view).
   - /metrics: per detection family FP rate + median time to close.
   - Live: 1001 alerts stored over 72h; both Nov 17 incidents now show summary + entities.
-- Phase 8: not started
+- Phase 8 Portfolio: DONE 2026-11-19 except screenshots. README (Mermaid architecture, results, security design, quickstart, limitations), docs/writeups/ (prompt injection, brute-force correlation), docs/resume.md, docs/DEMO.md (9 test scenarios + troubleshooting; security commands verified live). Pre-publish scan: no secrets/hostnames/public IPs in files or history.
+- Phase 9 Honeypot + ESP32 (LilyGO T-Embed CC1101): planned.
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
 ## Lessons from the first attempt
@@ -80,7 +81,7 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - TLS: indexer cert is issued to "wazuh.indexer" (not localhost) -> client checks that name while connecting to localhost (WAZUH_INDEXER_TLS_NAME). API cert is self-signed and separate from the root CA -> pinned (WAZUH_API_CA_FILE). If Wazuh certs are regenerated, re-run `make wazuh-certs`.
 - Alerts are NOT in the manager API in 4.x; they're in the indexer (9200, index pattern wazuh-alerts-*). Agents come from the manager API (55000).
 - 4624 rule 60106 so far only matches SYSTEM service logons; interactive user logons didn't produce 60106 alerts.
-- Windows agent ossec.conf had <address> hardcoded to the WSL eth0 IP (172.24.228.45), which changes on reboot. Fix: 127.0.0.1 (Docker Desktop publishes 1514/1515 on Windows localhost; verified port 1515 reachable).
+- Windows agent ossec.conf had <address> hardcoded to the WSL eth0 IP (172.24.x.x), which changes on reboot. Fix: 127.0.0.1 (Docker Desktop publishes 1514/1515 on Windows localhost; verified port 1515 reachable).
 - Agent re-enrollment is automatic: when the manager rejects an old key, a 4.x agent requests a new one on 1515.
 - Generate 4625 with a NON-EXISTENT user: wrong passwords on your real account can trigger lockout (Win11 default ~10 attempts).
 - Rule 60204 did NOT fire on a 10-failure burst sent in the same millisecond (firedtimes out of order -> parallel processing). Fired fine with 1 s spacing. Phase 6: count failures ourselves, don't rely only on Wazuh correlation.
@@ -99,8 +100,9 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 8 (Portfolio): README with architecture diagram, dashboard screenshots/demo GIF (incident page, entity pivot, metrics), writeups, resume bullets. Then interview practice from docs/interview-answers.md (deferred until now: most phases done).
-Optional: regenerate a fresh brute-force burst (non-existent user, 1 s spacing) before recording the demo so the 24h chart shows an attack.
+1. Owner runs docs/DEMO.md end to end; save screenshots to docs/screenshots/ -> add them to README.
+2. Interview practice from docs/interview-answers.md (deferred until now).
+3. Phase 9: honeypot on the lab network + attacks from the ESP32 T-Embed CC1101 (own devices only).
 Session start: `make check && make wazuh-up && make wazuh-check`, then `make soc ARGS="run --last 24h"`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 

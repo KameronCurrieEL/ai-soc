@@ -15,6 +15,7 @@ Each phase ends with: working demo, tests where sensible, a short writeup in doc
 | 7b | Web dashboard | Small local web UI over the Phase 7 queue: incident list, AI summary + rule reasons, approve/reject buttons, audit view. Localhost only, CSRF-protected | Approve in the browser -> same audit log entry as the CLI |
 | 7c | Analyst views | Plain-English summary, offline IP location, entity pivots, timeline, 24h activity chart, close verdicts + detection-quality metrics | Click from incident to entity and back; FP rate per rule on /metrics |
 | 8 | Portfolio | README with architecture diagram, demo GIF, writeups, resume bullets | A stranger can read the repo and understand it in 5 minutes |
+| 9 | Honeypot + hardware attacks | Lab honeypot monitored by Wazuh; attack it from an ESP32 (LilyGO T-Embed CC1101) on the lab network; new detections + incidents | Device attack -> Wazuh alert -> incident in the console, documented |
 
 ## Attack simulations to generate data (own lab only)
 Failed logons (4625) via wrong password attempts, new local user creation, service install, PowerShell encoded command, file integrity changes. Use Atomic Red Team (free) only on your own machine.
