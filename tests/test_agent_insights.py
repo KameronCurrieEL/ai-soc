@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from soc.agent.insights import activity, entities, matches_entity, parse_any_time, plain_summary, timeline
+from soc.agent.insights import activity, entities, matches_entity, parse_any_time, pivot, plain_summary, timeline
 
 
 def row(i, ts, prio="medium", desc="Logon Failure", ip="::1", scope="loopback", user="soc-test-user", **extra):
@@ -70,3 +70,31 @@ def test_activity_buckets():
                   row(3, "2026-11-16T10:00:00.000+0000")], hours=24, now=now)
     assert len(b) == 24 and b[-2].counts["medium"] == 1 and b[-2].counts["high"] == 1 and b[-2].total == 2
     assert sum(x.total for x in b) == 2  # the old one is outside the window
+
+
+def inc_row(inc_id, key, alert_ids):
+    return {"id": inc_id, "key": key, "alert_ids": json.dumps(alert_ids)}
+
+
+def test_pivot_on_ip_finds_alerts_incidents_and_co_occurring_accounts():
+    alerts = [row(1, T.format(3), ip="8.8.8.8", scope="public", user="admin"),
+              row(2, T.format(4), ip="8.8.8.8", scope="public", user="backup"),
+              row(3, T.format(5), ip="::1", user="soc-test-user")]
+    incs = [inc_row("INC-a", "brute_force|8.8.8.8@windows-host", ["a1", "a2"]),
+            inc_row("INC-b", "brute_force|::1@windows-host", ["a3"])]
+    p = pivot("ip", "8.8.8.8", alerts, incs)
+    assert [r["id"] for r in p.alerts] == ["a1", "a2"]
+    assert [i["id"] for i in p.incidents] == ["INC-a"]
+    assert sorted(e.value for e in p.related["user"]) == ["admin", "backup"]   # which accounts this IP tried
+    assert "ip" not in p.related                                               # itself is not "related"
+
+
+def test_pivot_falls_back_to_incident_key_when_alerts_not_stored():
+    old = inc_row("INC-old", "brute_force|::1@windows-host", ["never-stored"])
+    assert [i["id"] for i in pivot("ip", "::1", [], [old]).incidents] == ["INC-old"]
+    assert [i["id"] for i in pivot("host", "windows-host", [], [old]).incidents] == ["INC-old"]
+    assert pivot("user", "soc-test-user", [], [old]).incidents == []   # key doesn't know users
+
+
+def test_pivot_unknown_type_matches_nothing():
+    assert pivot("bogus", "x", [row(1, T.format(3))], []).alerts == []

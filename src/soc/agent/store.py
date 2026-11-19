@@ -139,11 +139,6 @@ def recent_alerts(conn: sqlite3.Connection, hours: int = 24) -> list[sqlite3.Row
     return conn.execute("SELECT * FROM alerts WHERE timestamp >= ? ORDER BY timestamp", (cutoff,)).fetchall()
 
 
-def incidents_with_alerts(conn: sqlite3.Connection, alert_ids: set[str]) -> list[sqlite3.Row]:
-    """Incidents that contain any of the given alerts (entity pivot)."""
-    return [r for r in list_incidents(conn, None) if alert_ids & set(json.loads(r["alert_ids"]))]
-
-
 def audit(conn: sqlite3.Connection, actor: str, event: str, incident_id: str | None = None,
           proposal_id: int | None = None, **detail: object) -> None:
     """Append one audit entry. Callers commit together with the change it describes."""

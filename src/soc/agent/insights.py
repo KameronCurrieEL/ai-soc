@@ -88,6 +88,42 @@ def matches_entity(alert: dict, etype: str, value: str) -> bool:
     return value in [v for v in ENTITY_TYPES[etype][1](alert) if v]
 
 
+@dataclass
+class Pivot:
+    etype: str
+    value: str
+    alerts: list            # matching stored alert rows, oldest first
+    incidents: list         # incidents that involve the entity
+    related: dict[str, list[Entity]]   # other entities seen in the same alerts (the next pivots)
+
+
+def pivot(etype: str, value: str, alert_rows: list, incidents: list) -> Pivot:
+    """Everything stored about one entity: its alerts, its incidents, and what it co-occurs with.
+
+    An incident matches if one of its alerts matches. Incidents whose alerts aren't stored
+    (created before alert storage, or older than the retention window) match on their
+    key instead, which only knows the host and source IP.
+    """
+    matched = [r for r in alert_rows if matches_entity(alert_data(r), etype, value)]
+    matched_ids = {r["id"] for r in matched}
+    stored_ids = {r["id"] for r in alert_rows}
+    hits = []
+    for inc in incidents:
+        ids = set(json.loads(inc["alert_ids"]))
+        if ids & matched_ids:
+            hits.append(inc)
+        elif not ids & stored_ids and etype in ("ip", "host"):
+            hosts, ips = hosts_and_ips(inc, [])
+            if value in (ips if etype == "ip" else hosts):
+                hits.append(inc)
+    related = entities(matched)
+    if etype in related:  # drop the entity itself; keep other values of the same type (e.g. other IPs)
+        related[etype] = [e for e in related[etype] if e.value != value]
+        if not related[etype]:
+            del related[etype]
+    return Pivot(etype, value, sorted(matched, key=lambda r: r["timestamp"]), hits, related)
+
+
 # ---------- timeline ----------
 
 @dataclass
