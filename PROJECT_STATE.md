@@ -1,5 +1,5 @@
 # PROJECT_STATE.md
-Last updated: 2026-11-17 (RESTART: rebuilding from scratch with Claude Code)
+Last updated: 2026-11-19
 
 ## Goal
 AI-assisted SOC: Wazuh -> Python -> AI Analyst -> Decision Engine -> SOC Agent -> Human Approval -> Response
@@ -40,7 +40,9 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
   - src/soc/agent/: incidents.py (group by rule family + entity, 60 min window, stable INC ids), store.py (SQLite data/outputs/soc.db: incidents, proposals, audit_log; triggers make the audit log append-only; idempotent upsert/merge), approval.py (proposed->approved->executed / proposed->rejected via conditional UPDATE + audit in one transaction; named human required; close needs all proposals resolved), pipeline.py, cli.py (`make soc ARGS="run|queue|show|approve|reject|execute|close|audit"`).
   - src/soc/response/actions.py: strict target validation (command injection), PowerShell command + rollback per action, dry-run only (live execution raises).
   - Live: 1000 alerts -> 5 decisions -> 2 incidents, 5 AI calls (pre-filter). Owner handled both in the CLI: rejected agent-stop (planned restart), approved + dry-run executed the brute-force investigation, closed both. Audit log shows every step with actor + reason.
-- Phase 7b Web dashboard: not started
+- Phase 7b Web dashboard: DONE 2026-11-17 (commit 51a72dc). Flask + Jinja2 autoescape, no JS, strict CSP, CSRF token on every POST, Host-header check (DNS rebinding), 127.0.0.1 only. Decision D3.
+- Phase 7c Analyst views: IN PROGRESS. 219 tests pass.
+  - Step 1 DONE 2026-11-19: close needs a verdict (true_positive | benign | false_positive), stored on the incident + audit log, CLI `--verdict` and web dropdown. Pipeline stores normalized alerts + decisions in SQLite (alerts table, 7-day retention). src/soc/agent/insights.py: timeline, entities, plain_summary, activity (pure functions, tested, not yet in the UI).
 - Phase 8: not started
 - Prior attempt (archived): Phases 1-4 worked, Phase 5 partial. Reuse lessons, not code.
 
@@ -91,7 +93,7 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-Phase 7b (Web dashboard): local web UI over soc.agent.store/approval (no logic duplicated): incident list, incident detail (rule reasons, AI notes marked advisory, proposals, audit trail), approve/reject/execute/close forms, audit view. Bind 127.0.0.1 only; CSRF token on every POST; HTML-escape all log-derived text (XSS = the web version of the terminal-escape issue); approver name required. Decide stdlib http.server vs a small framework (record in docs/decisions.md).
+Phase 7c step 2: show insights in the dashboard. Incident page: plain-English summary on top, timeline (alerts + audit events), entity list with pivot links (`/entity/<type>/<value>` -> matching alerts + incidents). Index page: 24h activity bar chart (server-rendered, no JS, CSP stays strict). Then step 3: verdict stats (false-positive rate per rule) as detection-quality metric.
 Session start: `make check && make wazuh-up && make wazuh-check`, then `make soc ARGS="run --last 24h"`.
 Interview practice DEFERRED (owner's choice) until most phases are done: then answer questions from docs/interview-answers.md (incl. own STAR story for Phase 1 Q4). Keep adding Q + model answers each phase.
 
