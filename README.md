@@ -10,13 +10,13 @@ Everything runs on one laptop: Wazuh in Docker, Python in WSL2, the language mod
 
 ## Screenshots
 
-| Overview | Live alerts | Incident |
+| Incident queue | Live alerts | Incident detail |
 |---|---|---|
-| ![Overview dashboard](docs/screenshots/overview.png) | ![Live alert feed](docs/screenshots/live-alerts.png) | ![Incident detail](docs/screenshots/incident.png) |
+| ![Incident queue with 24h activity chart and AI assistant](docs/screenshots/queue.png) | ![Live auto-updating alert feed](docs/screenshots/live-alerts.png) | ![Incident detail: what happened, where, involved, rules](docs/screenshots/incident.png) |
 
-| Red-team responder | Detection quality | Users & tenants |
+| Red-team responder & response actions | Detection quality | Users & tenants |
 |---|---|---|
-| ![AI responder](docs/screenshots/responder.png) | ![Detection quality metrics](docs/screenshots/metrics.png) | ![Users and roles](docs/screenshots/users.png) |
+| ![Red-team responder and approve/reject response actions](docs/screenshots/responder.png) | ![Detection-quality metrics by rule](docs/screenshots/metrics.png) | ![Users, roles and tenants admin](docs/screenshots/users.png) |
 
 ## Architecture
 
