@@ -106,7 +106,8 @@ Free/local only. See CLAUDE.md for rules, docs/ROADMAP.md for phases.
 - Indexer uses the admin user (lab). Real deployment: a read-only role limited to wazuh-alerts-*.
 
 ## Next step
-0. Owner reviews the VARDR console (make web -> http://localhost:8765, demo/demo-pass) and lists what looks off; then rename README/docs to VARDR and retake screenshots.
+0. VARDR console reviewed + approved by owner; README renamed to VARDR and pushed (commit e4b5407). Pending-approval box on overview links to /queue?view=needs_approval (dbcd5ab). Still to do: retake screenshots on the VARDR console (demo/demo-pass), swap into README, remove the "before redesign" note; optional GitHub repo rename ai-soc -> vardr (then update remote).
+0b. PHASE 9 IN PROGRESS (see docs/phase9-honeypot.md). Decided: own Bruce fork (separate AGPL repo) extended via its existing serial command interface; ESP32 = hands (scan + fire one attack), Python recon agent = brain (analysis + ranked attack menu, you pick); mirrors the defensive responder, both human-gated. Build order: (1) Rocky+Cowrie+Wazuh-agent honeypot VM [owner building it now], (2) Bruce serial cmds, (3) src/soc/ai/recon.py TDD vs mock scans, (4) close the loop. RAM fix written to C:/Users/Kameron/.wslconfig (memory=5GB, autoMemoryReclaim=gradual) — apply with `wsl --shutdown` from Windows before running VM+Wazuh together. NEXT SESSION: owner gives the VM's LAN IP -> verify from WSL -> step 1c Cowrie install.
 Over-the-top ideas agreed as a direction (order): CI (tests, ruff, bandit, pip-audit) -> Phase 9 with live radar blip during ESP32 attack + demo video -> Atomic Red Team detection CI + ATT&CK coverage -> prompt-injection benchmark with numbers -> incident replay on the radar -> one-command docker demo.
 1. Owner runs docs/DEMO.md end to end; save screenshots to docs/screenshots/ -> add them to README.
 2. Interview practice from docs/interview-answers.md (deferred until now).
