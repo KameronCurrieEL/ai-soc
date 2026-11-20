@@ -184,3 +184,25 @@ unchanged; this only governs whether the executed step is simulated or real.
 
 **Consequences.** Going live is an explicit, auditable operator action with a per-target allowlist. The
 transport backends and a settings UI for the allowlist are the remaining work before Phase 9 real actions.
+
+---
+
+## D10 (2026-11-19): VARDR identity: the console as a rack-mounted radar instrument
+
+**Context.** The console looked like a generic dark SaaS admin template. For a portfolio piece, the first
+screenshot has to be memorable and the design has to be explainable, not decoration.
+
+**Decision.** Rename the console **VARDR** (Old Norse *vörðr*, a guardian spirit that watches over a home).
+Visual language = rack hardware (ears, 1U status unit, push buttons, VFD counters) framing a radar CRT and
+flight-progress strips. One colour rule carries meaning: **teal phosphor = machine telemetry**,
+**amber = a human has to act** (lit only when non-zero), red = autopilot acted. Dangerous controls look
+dangerous (autopilot under a flip guard, execution behind a key switch). The 24h bar chart became a radar:
+angle = UTC time of day, outer wedges = alerts per hour, blips = incidents on a ring per priority (more
+severe = closer to the centre). Single dark theme on purpose.
+
+**Constraints kept.** CSP stays `default-src 'self'`: fonts (B612, B612 Mono, Barlow Condensed, Share Tech
+Mono; SIL OFL) are self-hosted, the radar is server-rendered SVG (no inline styles), every control is
+still a plain link or CSRF-protected form, animations stop under `prefers-reduced-motion`.
+
+**Consequences.** Light theme dropped (could return as a "day mode"). Python package stays `soc`;
+README/screenshots to be renamed and retaken.
