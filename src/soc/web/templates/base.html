@@ -12,70 +12,76 @@
   <script src="{{ url_for('static', filename='triage.js') }}" defer></script>
 </head>
 <body>
-<div class="shell">
-  <aside class="sidebar">
-    <a class="brand" href="{{ url_for('index') }}">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path class="brand-mark" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path class="brand-check" d="m8.5 12 2.5 2.5 4.5-5"/></svg>
-      <span>VARDR<small>Analyst console</small></span>
-    </a>
-    <nav aria-label="Main">
-      <a href="{{ url_for('overview') }}" class="{{ 'active' if nav == 'overview' }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h7V4H4zM13 20h7V4h-7zM4 20h7v-5H4z"/></svg>Overview</a>
-      <a href="{{ url_for('index') }}" class="{{ 'active' if nav in ('index', 'incident', 'entity') }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Incident queue</a>
-      <a href="{{ url_for('alerts_feed') }}" class="{{ 'active' if nav == 'alerts_feed' }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4l2-12 4 16 2-9h4"/></svg>Live alerts</a>
-      <a href="{{ url_for('metrics') }}" class="{{ 'active' if nav == 'metrics' }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Detection quality</a>
-      <a href="{{ url_for('audit_view') }}" class="{{ 'active' if nav == 'audit_view' }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg>Audit log</a>
-      {% if is_admin %}<a href="{{ url_for('users') }}" class="{{ 'active' if nav in ('users',) }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20a6 6 0 0 1 12 0M17 11l2 2 4-4"/></svg>Users</a>{% endif %}
-    </nav>
-    <div class="side-foot">
+{# The console is drawn as rack hardware: two ears with screws, a 1U status unit, a column of push buttons,
+   and the page content as panels. Purely visual: every control is still a plain link or CSRF-protected form. #}
+<div class="rack">
+  <div class="ear" aria-hidden="true"><span class="screw"></span><span class="screw"></span><span class="screw"></span><span class="screw"></span></div>
+
+  <div class="rack-units">
+    <header class="unit u-status">
+      <a class="plate" href="{{ url_for('index') }}">
+        <strong>VARDR</strong><span>Analyst console{% if user %} · tenant {{ user.tenant }}{% endif %}</span>
+      </a>
+      <div class="lamps">
+        <span class="lamp" title="Local model via Ollama (checked every 30 s)"><i class="led {{ 'led-ok' if ai_ok else 'led-fault' }}"></i>{{ ai_label }}</span>
+        <span class="lamp" title="Response actions never run for real in this lab"><i class="led led-amber"></i>Dry-run</span>
+        <span class="lamp" title="Autonomous response to rule-critical incidents (dry-run)"><i class="led {{ 'led-fault' if autopilot else 'led-off' }}"></i>Autopilot {{ 'ON' if autopilot else 'off' }}</span>
+      </div>
+      <span class="grow"></span>
+      {% if can_act %}
+      <form class="ctl autopilot-toggle" method="post" action="{{ url_for('autopilot_toggle') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="enabled" value="{{ 'off' if autopilot else 'on' }}">
+        <button class="guard {{ 'on' if autopilot else '' }}" type="submit"
+                title="When ON, rule-critical incidents are contained automatically (dry-run) while you're away">
+          <span class="guard-cover" aria-hidden="true"></span>
+          <span class="engr">Autopilot: <strong>{{ 'ON' if autopilot else 'OFF' }}</strong></span></button>
+      </form>
+      {% endif %}
+      <div class="ctl" title="Live execution is disabled: every action is a dry-run">
+        <span class="keysw" aria-hidden="true"></span><span class="engr">Exec · safe</span>
+      </div>
       {% if user %}
-      <div class="whoami">
-        <span class="dot-user"></span><strong>{{ user.name }}</strong><span class="role-tag">{{ user.role }}</span><span class="role-tag" title="tenant">{{ user.tenant }}</span>
+      <div class="operator">
+        <strong>{{ user.name }}</strong>
+        <span class="engr">{{ user.role }} · {{ user.tenant }}</span>
         <form method="post" action="{{ url_for('logout') }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button class="linklike" type="submit">sign out</button>
         </form>
       </div>
       {% endif %}
-      {% if can_act %}
-      <form class="autopilot-toggle" method="post" action="{{ url_for('autopilot_toggle') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="enabled" value="{{ 'off' if autopilot else 'on' }}">
-        <span class="mode">DRY-RUN</span>
-        <button class="ap-btn {{ 'on' if autopilot else '' }}" type="submit"
-                title="When ON, rule-critical incidents are contained automatically (dry-run) while you're away">
-          Autopilot: <strong>{{ 'ON' if autopilot else 'OFF' }}</strong></button>
-      </form>
-      {% else %}<span class="mode">DRY-RUN</span>{% endif %}
-      <p>Bound to 127.0.0.1. Every action is attributed to your account and written to an append-only audit log.</p>
-    </div>
-  </aside>
-
-  <div class="main-col">
-    <header class="topbar">
-      <div class="crumbs">{% block crumbs %}<strong>Incident queue</strong>{% endblock %}</div>
-      <div class="status-row">
-        <span class="pill {{ 'pill-ok' if ai_ok else 'pill-down' }}" title="Local model via Ollama (checked every 30 s)"><i></i>{{ ai_label }}</span>
-        <span class="pill {{ 'pill-down' if autopilot else '' }}" title="Autonomous response to rule-critical incidents (dry-run)"><i></i>Autopilot {{ 'ON' if autopilot else 'off' }}</span>
-        <span class="pill pill-warn" title="Response actions never run for real in this lab"><i></i>Dry-run</span>
-        {% if analyst %}<span class="pill"><i class="dot-user"></i>{{ analyst }}</span>{% endif %}
-      </div>
     </header>
-    <main>
-      {% if autopilot %}<div class="banner-autopilot" role="status"><strong>Autopilot is ON.</strong> Rule-critical incidents are contained automatically (dry-run) and flagged for your review.</div>{% endif %}
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}
-          <div class="flash flash-{{ category }}" role="status">{{ message }}</div>
+
+    <div class="rack-body">
+      <nav class="unit u-nav" aria-label="Main">
+        <span class="engr">Select</span>
+        {% set items = [('overview', 'Overview', ('overview',)), ('index', 'Incident queue', ('index', 'incident', 'entity')),
+                        ('alerts_feed', 'Live alerts', ('alerts_feed',)), ('metrics', 'Detection quality', ('metrics',)),
+                        ('audit_view', 'Audit log', ('audit_view',))] %}
+        {% for endpoint, label, active in items %}
+        <a href="{{ url_for(endpoint) }}" class="pushbtn {{ 'active' if nav in active }}" {% if nav in active %}aria-current="page"{% endif %}><i class="led"></i>{{ label }}</a>
         {% endfor %}
-      {% endwith %}
-      {% block content %}{% endblock %}
-    </main>
+        {% if is_admin %}<a href="{{ url_for('users') }}" class="pushbtn {{ 'active' if nav == 'users' }}" {% if nav == 'users' %}aria-current="page"{% endif %}><i class="led"></i>Users</a>{% endif %}
+        <p class="nav-foot">Bound to 127.0.0.1. Every action is attributed to your account and written to an append-only audit log.</p>
+      </nav>
+
+      <div class="main-col">
+        <div class="crumbs">{% block crumbs %}<strong>Incident queue</strong>{% endblock %}</div>
+        <main>
+          {% if autopilot %}<div class="banner-autopilot" role="status"><strong>Autopilot is ON.</strong> Rule-critical incidents are contained automatically (dry-run) and flagged for your review.</div>{% endif %}
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}" role="status">{{ message }}</div>
+            {% endfor %}
+          {% endwith %}
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
   </div>
+
+  <div class="ear" aria-hidden="true"><span class="screw"></span><span class="screw"></span><span class="screw"></span><span class="screw"></span></div>
 </div>
 </body>
 </html>
