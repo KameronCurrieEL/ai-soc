@@ -132,7 +132,8 @@ make check                      # Python, Docker daemon, Ollama reachable?
 make wazuh-up && make wazuh-certs && make wazuh-check
 make geoip                      # optional: offline IP -> country database
 make soc ARGS="run --last 24h"  # fetch -> decide -> incidents (add --ai for the LLM)
-make web                        # http://localhost:8765
+make web                        # dev server, http://localhost:8765
+make serve                      # production server (waitress); expose via a tunnel — see docs/DEPLOY.md
 make test                       # 258 tests, no Wazuh or Ollama needed
 ```
 

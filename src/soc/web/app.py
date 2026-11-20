@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
+import os
 import secrets
 import sqlite3
 import sys
@@ -47,6 +48,37 @@ SECURITY_HEADERS = {
 }
 
 
+def _secret_key(db_path: Path | str) -> str:
+    """Stable Flask secret so sessions survive restarts (a dedicated server restarts).
+
+    Order: SOC_SECRET_KEY env -> a persisted key file next to the DB (generated once, 0600) ->
+    an ephemeral key (tests / read-only FS). The file lives under data/outputs (gitignored).
+    """
+    env = os.environ.get("SOC_SECRET_KEY")
+    if env:
+        return env
+    try:
+        keyfile = Path(db_path).parent / "secret.key"
+        if keyfile.exists():
+            return keyfile.read_text().strip()
+        key = secrets.token_hex(32)
+        keyfile.parent.mkdir(parents=True, exist_ok=True)
+        keyfile.write_text(key)
+        try:
+            keyfile.chmod(0o600)
+        except OSError:
+            pass
+        return key
+    except (OSError, ValueError):
+        return secrets.token_hex(32)   # in-memory DB / no writable dir: ephemeral key
+
+
+def _extra_allowed_hosts() -> set[str]:
+    """Hostnames allowed in the Host header beyond localhost (e.g. a tunnel domain). Comma-separated."""
+    raw = os.environ.get("SOC_ALLOWED_HOSTS", "")
+    return {h.strip().rsplit(":", 1)[0].strip("[]") for h in raw.split(",") if h.strip()}
+
+
 def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_factory=None, ai_status=None,
                responder_factory=None) -> Flask:
     """Injectable for tests (no Wazuh or Ollama needed):
@@ -56,11 +88,15 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     responder_factory = responder_factory or _responder_llm
     ai_status = ai_status or _cached_ai_status()
     app = Flask(__name__)
+    https = os.environ.get("SOC_HTTPS") == "1"   # set when served over TLS (e.g. behind a tunnel)
     app.config.update(
-        SECRET_KEY=secrets.token_hex(32),       # new key per start: old sessions/tokens become invalid
+        SECRET_KEY=_secret_key(db_path),        # stable across restarts so sessions survive (see helper)
         SESSION_COOKIE_HTTPONLY=True,           # JavaScript can't read the session cookie
         SESSION_COOKIE_SAMESITE="Strict",       # browser won't send it on cross-site requests
+        SESSION_COOKIE_SECURE=https,            # over HTTPS, never send the cookie on plain HTTP
+        MAX_CONTENT_LENGTH=1 * 1024 * 1024,     # reject oversized request bodies
     )
+    allowed_hosts = ALLOWED_HOSTS | _extra_allowed_hosts()
     app.jinja_env.filters["fromjson"] = json.loads
 
     # ---------- per-request plumbing ----------
@@ -110,8 +146,8 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     @app.before_request
     def security_checks() -> None:
         host = (request.host or "").rsplit(":", 1)[0].strip("[]")
-        if host not in ALLOWED_HOSTS:
-            abort(400, "unexpected Host header")      # DNS rebinding protection
+        if host not in allowed_hosts:
+            abort(400, "unexpected Host header")      # DNS rebinding protection (SOC_ALLOWED_HOSTS to extend)
         if request.method == "POST":
             sent = request.form.get("csrf_token", "")
             expected = session.get("csrf", "")
@@ -599,15 +635,28 @@ def _default_runner(conn: sqlite3.Connection):
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Local SOC dashboard (127.0.0.1 only)")
-    p.add_argument("--port", type=int, default=DEFAULT_PORT)
+    p = argparse.ArgumentParser(description="SOC console")
+    p.add_argument("--port", type=int, default=int(os.environ.get("SOC_PORT", DEFAULT_PORT)))
+    p.add_argument("--host", default=os.environ.get("SOC_BIND", "127.0.0.1"),
+                   help="bind address; keep 127.0.0.1 and expose via a tunnel (default)")
+    p.add_argument("--prod", action="store_true", default=os.environ.get("SOC_PROD") == "1",
+                   help="serve with waitress (production WSGI) instead of the Flask dev server")
     args = p.parse_args(argv)
     with store.connect() as conn:          # first run: create an admin so the owner can log in
         msg = auth.ensure_seed_admin(conn)
     if msg:
         print(msg)
-    print(f"SOC dashboard on http://localhost:{args.port}  (localhost only; Ctrl+C to stop)")
-    create_app().run(host="127.0.0.1", port=args.port, debug=False)  # never debug=True: it allows code execution
+    app = create_app()
+    if args.prod:
+        try:
+            from waitress import serve
+        except ImportError:
+            print("waitress not installed: pip install -r requirements.txt (or drop --prod)"); return 1
+        print(f"SOC console (production/waitress) on http://{args.host}:{args.port}  (Ctrl+C to stop)")
+        serve(app, host=args.host, port=args.port, threads=8, ident="soc")
+    else:
+        print(f"SOC console (dev) on http://{args.host}:{args.port}  (Ctrl+C to stop)")
+        app.run(host=args.host, port=args.port, debug=False)   # never debug=True: it allows code execution
     return 0
 
 

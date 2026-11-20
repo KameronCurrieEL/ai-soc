@@ -54,3 +54,7 @@ web:  ## local dashboard on http://localhost:8765
 .PHONY: geoip
 geoip:  ## download the offline IP -> country database (DB-IP Lite, monthly)
 	./infra/get_geoip.sh
+
+.PHONY: serve
+serve:  ## production server (waitress). Expose via a tunnel; keep bind on 127.0.0.1.
+	SOC_PROD=1 $(PY) -m soc.web
