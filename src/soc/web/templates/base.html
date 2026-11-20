@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Queue{% endblock %} · AI-SOC Console</title>
+  <title>{% block title %}Queue{% endblock %} · VARDR</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='assistant.js') }}" defer></script>
   <script src="{{ url_for('static', filename='live.js') }}" defer></script>
@@ -16,7 +16,7 @@
   <aside class="sidebar">
     <a class="brand" href="{{ url_for('index') }}">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path class="brand-mark" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path class="brand-check" d="m8.5 12 2.5 2.5 4.5-5"/></svg>
-      <span>AI-SOC<small>Analyst console</small></span>
+      <span>VARDR<small>Analyst console</small></span>
     </a>
     <nav aria-label="Main">
       <a href="{{ url_for('overview') }}" class="{{ 'active' if nav == 'overview' }}">

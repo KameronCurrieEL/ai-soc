@@ -1,29 +1,37 @@
-/* AI-SOC console. Dark-first (follows the OS setting), no external fonts or scripts (CSP: 'self' only).
+/* VARDR console: a rack-mounted instrument with a radar CRT inset.
+   Colour rule: TEAL phosphor = machine telemetry (links, radar, AI, live feed);
+                AMBER = a human has to act (pending approvals, attention counts).
+   Single dark look on purpose (an instrument panel); no external fonts or scripts (CSP: 'self' only).
+   Fonts are self-hosted under static/fonts/ (SIL Open Font License, licence files alongside).
    Chart ramps --p-* were checked with the dataviz palette validator (one hue, monotone lightness,
-   light end >= 2:1 vs surface) for both themes: change them only together with a re-check. */
+   light end >= 2:1 vs surface): change them only together with a re-check. */
+
+@font-face { font-family: "B612"; font-weight: 400; font-display: swap; src: url("fonts/b612-400.woff2") format("woff2"); }
+@font-face { font-family: "B612"; font-weight: 700; font-display: swap; src: url("fonts/b612-700.woff2") format("woff2"); }
+@font-face { font-family: "B612 Mono"; font-weight: 400; font-display: swap; src: url("fonts/b612mono-400.woff2") format("woff2"); }
+@font-face { font-family: "B612 Mono"; font-weight: 700; font-display: swap; src: url("fonts/b612mono-700.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 500; font-display: swap; src: url("fonts/barlowcondensed-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; font-display: swap; src: url("fonts/barlowcondensed-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; font-display: swap; src: url("fonts/barlowcondensed-700.woff2") format("woff2"); }
+@font-face { font-family: "Share Tech Mono"; font-weight: 400; font-display: swap; src: url("fonts/sharetechmono-400.woff2") format("woff2"); }
 
 :root {
-  --bg: #0b0f17; --panel: #111725; --panel-2: #161e30; --line: #222c42; --line-2: #2c3852;
-  --text: #e6eaf2; --text-2: #b6bfd0; --muted: #8590a6;
-  --accent: #5b9cff; --accent-ink: #0b0f17; --ok: #3fbf86; --no: #f26b61; --warn: #f2b84b;
-  --crit: #ff6b6b; --high: #ff9248; --med: #f2c14e; --low: #93a1b8;
+  /* rack hardware */
+  --bg: #141517; --panel: #1f2124; --panel-2: #26282b; --line: #33363a; --line-2: #45494e;
+  --text: #e4e6e9; --text-2: #b9bdc3; --muted: #868b92;
+  /* teal phosphor = the machine; amber = you */
+  --accent: #6fcfbf; --accent-ink: #061214; --attn: #ffb21a; --attn-off: #33280f;
+  --crt: #051113; --phos-dim: #3d7d74; --phos-line: #17383a; --phos-text: #cfeee6;
+  --ok: #46e08a; --no: #ff5a4f; --warn: #ffb21a;
+  --crit: #ff4d63; --high: #ff8740; --med: #f0b44a; --low: #7fa6c9;
   --p-low: #86331a; --p-medium: #c0491f; --p-high: #e8794f; --p-critical: #f6b49a;
-  --shadow: 0 1px 2px rgb(0 0 0 / .35), 0 8px 24px rgb(0 0 0 / .18);
-  --radius: 10px; --radius-sm: 6px;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --shadow: inset 0 1px 0 #3d4045, 0 2px 0 #0b0c0d;
+  --radius: 3px; --radius-sm: 2px;
+  --sans: "B612", "Segoe UI", system-ui, sans-serif;            /* body: Airbus cockpit face, built for legibility */
+  --mono: "B612 Mono", ui-monospace, Consolas, monospace;       /* data, IDs, telemetry */
+  --label: "Barlow Condensed", "Arial Narrow", sans-serif;      /* engraved panel labels */
+  --vfd: "Share Tech Mono", ui-monospace, monospace;            /* vacuum-fluorescent counters */
   color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f3f5f9; --panel: #ffffff; --panel-2: #f7f9fc; --line: #e2e7ef; --line-2: #d3dae6;
-    --text: #111827; --text-2: #374151; --muted: #5b6475;
-    --accent: #2563eb; --accent-ink: #ffffff; --ok: #15803d; --no: #c2410c; --warn: #a16207;
-    --crit: #c81e1e; --high: #c2410c; --med: #8a5a00; --low: #526079;
-    --p-low: #eb9a7c; --p-medium: #dd6236; --p-high: #b23d17; --p-critical: #6e1f0c;
-    --shadow: 0 1px 2px rgb(16 24 40 / .06), 0 6px 18px rgb(16 24 40 / .06);
-    color-scheme: light;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -405,3 +413,12 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
             background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .bulk-bar #chk-count { font-variant-numeric: tabular-nums; }
 .bulk-hint { font-size: 12px; flex-basis: 100%; }
+
+/* ---------- type roles (VARDR) ---------- */
+/* Engraved panel labels: condensed, uppercase, tracked. */
+h3, .list th, .tile-label, .kpi span, .status, .badge, .role-tag, .head-stats span, .scope, .src-agent, .mode {
+  font-family: var(--label); font-weight: 600; letter-spacing: .14em; }
+h1, h2 { font-family: var(--label); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+h1 { font-size: 1.8rem; } h2 { font-size: 1.05rem; }
+/* Counters read like vacuum-fluorescent displays. */
+.tile strong, .kpi strong, .head-stats strong { font-family: var(--vfd); font-weight: 400; letter-spacing: .04em; }
