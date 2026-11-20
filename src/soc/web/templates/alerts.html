@@ -25,7 +25,7 @@
   {% if sel_priority or sel_source or q %}<a class="btn" href="{{ url_for('alerts_feed') }}">Clear</a>{% endif %}
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap crt-table">
 <table class="list feed">
   <thead><tr><th>Time (UTC)</th><th>Sev</th><th>Source</th><th>Rule</th><th>Host</th><th>Account</th><th>Source IP</th><th>Description</th></tr></thead>
   <tbody id="feed-body" data-endpoint="{{ url_for('alerts_json') }}">

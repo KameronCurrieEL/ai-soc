@@ -10,8 +10,7 @@
   <main class="login-wrap">
     <form class="login-card" method="post" action="{{ url_for('login_post') }}">
       <div class="login-brand">
-        <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path class="brand-mark" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path class="brand-check" d="m8.5 12 2.5 2.5 4.5-5"/></svg>
-        <div><strong>VARDR</strong><span>Analyst console</span></div>
+        <strong>VARDR</strong><span>Analyst console · sign in</span>
       </div>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
