@@ -14,6 +14,8 @@
     el.classList.remove("just-changed");
     void el.offsetWidth;            // restart the flash animation
     el.classList.add("just-changed");
+    const box = el.closest("[data-lit]");          // attention displays glow amber only when non-zero
+    if (box) box.classList.toggle("lit", Number(val) > 0);
   };
 
   function apply(data) {

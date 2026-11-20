@@ -23,7 +23,7 @@
       </form>{% endif %}</p>
   </div>
   <div class="head-stats">
-    <div><strong>{{ pending }}</strong><span>pending</span></div>
+    <div class="{{ 'lit' if pending }}"><strong>{{ pending }}</strong><span>pending</span></div>
     <div><strong>{{ proposals | length }}</strong><span>proposals</span></div>
     <div><strong>{{ (inc['alert_ids'] | fromjson) | length }}</strong><span>alerts</span></div>
   </div>

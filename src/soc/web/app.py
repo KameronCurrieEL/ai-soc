@@ -181,7 +181,9 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         open_all = store.query_incidents(conn, status="open")
         counts = {p: sum(1 for r in open_all if r["priority"] == p) for p in ("critical", "high", "medium", "low")}
         buckets = insights.activity(store.recent_alerts(conn, hours=24), hours=24)
+        pending_total = conn.execute("SELECT COUNT(*) n FROM proposals WHERE status = 'proposed'").fetchone()["n"]
         return {"incidents": incidents, "show_all": show_all, "last_run": last_run, "counts": counts,
+                "pending_total": pending_total,
                 "filters": f, "buckets": buckets, "chart": charts.stacked_hourly(buckets),
                 "chart_total": sum(b.total for b in buckets),
                 "alerts_24h": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)}}

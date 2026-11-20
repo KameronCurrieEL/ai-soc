@@ -18,13 +18,13 @@
   </form>{% endif %}
 </section>
 
-<section class="kpis">
-  <div class="kpi {{ 'kpi-alert' if pending }}"><span>Pending approval</span><strong data-kpi="pending">{{ pending }}</strong><small>{{ approved }} approved waiting</small></div>
-  <div class="kpi"><span>Open incidents</span><strong data-kpi="open">{{ open_total }}</strong><small>{{ counts['critical'] + counts['high'] }} high/critical</small></div>
-  <div class="kpi"><span>Alerts (24h)</span><strong data-kpi="alerts_24h">{{ alerts_24h }}</strong><small>{{ alerts_24h_by_prio['high'] + alerts_24h_by_prio['critical'] }} high+</small></div>
-  <div class="kpi"><span>Median time to close</span><strong>{% if mttr is not none %}{{ '%.0f' % mttr }}<em>m</em>{% else %}–{% endif %}</strong><small>MTTR</small></div>
-  <div class="kpi"><span>False-positive rate</span><strong>{% if fp_rate is not none %}{{ '%.0f' % (fp_rate * 100) }}<em>%</em>{% else %}–{% endif %}</strong><small>of judged incidents</small></div>
-  <div class="kpi {{ 'kpi-auto' if autopilot_24h }}"><span>Autopilot (24h)</span><strong data-kpi="autopilot_24h">{{ autopilot_24h }}</strong><small>auto-contained</small></div>
+<section class="unit vfds" aria-label="Key figures">
+  <div class="vfd {{ 'lit' if pending }}" data-lit><span class="vfd-label">Pending approval</span><strong data-kpi="pending">{{ pending }}</strong><small>{{ approved }} approved waiting</small></div>
+  <div class="vfd {{ 'lit' if open_total }}" data-lit><span class="vfd-label">Open incidents</span><strong data-kpi="open">{{ open_total }}</strong><small>{{ counts['critical'] + counts['high'] }} high/critical</small></div>
+  <div class="vfd vfd-info vfd-sep"><span class="vfd-label">Alerts (24h)</span><strong data-kpi="alerts_24h">{{ alerts_24h }}</strong><small>{{ alerts_24h_by_prio['high'] + alerts_24h_by_prio['critical'] }} high+</small></div>
+  <div class="vfd vfd-info"><span class="vfd-label">Median time to close</span><strong>{% if mttr is not none %}{{ '%.0f' % mttr }}<em>m</em>{% else %}–{% endif %}</strong><small>MTTR</small></div>
+  <div class="vfd vfd-info"><span class="vfd-label">False-positive rate</span><strong>{% if fp_rate is not none %}{{ '%.0f' % (fp_rate * 100) }}<em>%</em>{% else %}–{% endif %}</strong><small>of judged incidents</small></div>
+  <div class="vfd vfd-auto {{ 'lit' if autopilot_24h }}" data-lit><span class="vfd-label">Autopilot (24h)</span><strong data-kpi="autopilot_24h">{{ autopilot_24h }}</strong><small>auto-contained</small></div>
 </section>
 
 <div class="ov-grid">
