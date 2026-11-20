@@ -158,6 +158,12 @@ main { padding: 10px 22px 56px; max-width: 1560px; width: 100%; }
 .vfd-info strong { color: var(--accent); text-shadow: 0 0 6px rgb(111 207 191 / .45); }
 .vfd-auto.lit strong { color: var(--no); text-shadow: 0 0 6px rgb(255 90 79 / .75), 0 0 18px rgb(255 60 60 / .3); }
 .vfd-sep { position: relative; }
+/* A display you can press: jumps to the incidents waiting for approval. */
+a.vfd-link { color: inherit; text-decoration: none; cursor: pointer; border-color: #000; transition: box-shadow .15s; }
+a.vfd-link small::after { content: " ›"; color: var(--text-2); }
+a.vfd-link:hover { box-shadow: inset 0 0 0 1px #6b5214, inset 0 6px 14px rgb(0 0 0 / .85), 0 0 12px rgb(255 178 26 / .25); }
+a.vfd-link:hover small { color: var(--text-2); }
+a.vfd-link:focus-visible { outline: 2px solid var(--attn); outline-offset: 2px; }
 
 /* ---------- badges / status / tags ---------- */
 .badge { display: inline-flex; align-items: center; gap: 5px; font: 600 10.5px/1 var(--label); text-transform: uppercase; letter-spacing: .14em;

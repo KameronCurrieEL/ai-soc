@@ -444,6 +444,14 @@ def test_overview_dashboard_renders_kpis_and_severity(env):
     assert "style=" not in page                                                     # CSP stays strict
 
 
+def test_pending_approval_display_links_to_needs_approval_view(env):
+    client, _, inc_id = env                     # fixture incident has proposals awaiting approval
+    page = client.get("/").get_data(as_text=True)
+    assert 'href="/queue?view=needs_approval"' in page
+    queue = client.get("/queue?view=needs_approval").get_data(as_text=True)
+    assert "/incident/" + inc_id in queue
+
+
 def test_queue_moved_to_its_own_route(env):
     client, _, _ = env
     assert client.get("/queue").status_code == 200

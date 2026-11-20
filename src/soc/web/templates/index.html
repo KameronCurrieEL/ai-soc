@@ -21,7 +21,7 @@
   {% for p in ['critical', 'high', 'medium', 'low'] %}
     <div class="vfd {{ 'lit' if counts[p] }}"><span class="vfd-label">{{ p }}</span><strong>{{ counts[p] }}</strong><small>open incidents</small></div>
   {% endfor %}
-  <div class="vfd vfd-sep {{ 'lit' if pending_total }}"><span class="vfd-label">Awaiting approval</span><strong>{{ pending_total }}</strong><small>proposals</small></div>
+  <a class="vfd vfd-sep vfd-link {{ 'lit' if pending_total }}" href="{{ url_for('index', view='needs_approval') }}" title="Show only incidents waiting for your approval"><span class="vfd-label">Awaiting approval</span><strong>{{ pending_total }}</strong><small>proposals · review</small></a>
   <div class="vfd vfd-info"><span class="vfd-label">Alerts · 24 h</span><strong>{{ chart_total }}</strong><small>stored</small></div>
 </section>
 
