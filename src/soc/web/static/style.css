@@ -390,3 +390,8 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
 .rp-out { margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; font: 12px var(--mono); color: var(--muted);
           white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .rp-status::before { animation: none; } }
+
+/* ---------- live KPI update flash ---------- */
+.just-changed { animation: kpi-flash 1.2s ease-out; }
+@keyframes kpi-flash { from { color: var(--accent); } to { color: inherit; } }
+@media (prefers-reduced-motion: reduce) { .just-changed { animation: none; } }

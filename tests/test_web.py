@@ -531,3 +531,21 @@ def test_responder_stream_still_requires_analyst(tmp_path):
     viewer = make_client(db, role="viewer", name="val")
     t = token(viewer, f"/incident/{inc.id}")
     assert viewer.post(f"/incident/{inc.id}/respond", data={"csrf_token": t}, headers={"X-Stream": "1"}).status_code == 403
+
+
+def test_overview_json_api_returns_kpis_and_counts(env):
+    client, db, _ = env
+    data = client.get("/api/overview.json").get_json()
+    assert "generated" in data
+    assert set(data["kpis"]) == {"pending", "open", "alerts_24h", "autopilot_24h"}
+    assert set(data["counts"]) == {"critical", "high", "medium", "low"}
+    assert data["kpis"]["open"] >= 1 and data["counts"]["high"] >= 1   # fixture has one open high incident
+    # overview page wires the live updater + data hooks
+    page = client.get("/").get_data(as_text=True)
+    assert 'data-kpi="pending"' in page and 'data-sev="high"' in page and 'src="/static/overview.js"' in page
+
+
+def test_overview_json_requires_login(tmp_path):
+    db = tmp_path / "soc.db"
+    anon = make_client(db, login=False)
+    assert anon.get("/api/overview.json").status_code == 401

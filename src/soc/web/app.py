@@ -199,6 +199,15 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     def overview():
         return render_template("overview.html", **overview_view(db()))
 
+    @app.get("/api/overview.json")
+    def overview_json():
+        """Polled by overview.js to refresh the KPI tiles + severity counts live (no full reload)."""
+        v = overview_view(db())
+        return jsonify({"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "kpis": {"pending": v["pending"], "open": v["open_total"],
+                                 "alerts_24h": v["alerts_24h"], "autopilot_24h": v["autopilot_24h"]},
+                        "counts": v["counts"]})
+
     @app.get("/queue")
     def index():
         conn = db()
