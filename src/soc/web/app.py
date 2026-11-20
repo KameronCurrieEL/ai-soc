@@ -165,18 +165,25 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
 
     # ---------- view models: one place builds what a page (and the assistant) sees ----------
 
-    def queue_view(conn: sqlite3.Connection, show_all: bool) -> dict:
+    def queue_view(conn: sqlite3.Connection, show_all: bool, filters: dict | None = None) -> dict:
+        f = filters or {}
+        status = None if (show_all or f.get("status") == "all") else (f.get("status") or "open")
+        rows = store.query_incidents(conn, status=status, priority=f.get("priority"),
+                                     q=f.get("q"), assignee=f.get("assignee"))
         incidents = []
-        for r in store.list_incidents(conn, None if show_all else "open"):
+        for r in rows:
             props = store.get_proposals(conn, r["id"])
             incidents.append({"row": r, "pending": sum(p["status"] == "proposed" for p in props),
                               "approved": sum(p["status"] == "approved" for p in props), "total": len(props)})
+        if f.get("view") == "needs_approval":
+            incidents = [i for i in incidents if i["pending"]]
         last_run = conn.execute("SELECT * FROM audit_log WHERE event = 'pipeline_run' ORDER BY id DESC LIMIT 1").fetchone()
-        counts = {p: sum(1 for i in incidents if i["row"]["priority"] == p and i["row"]["status"] == "open")
-                  for p in ("critical", "high", "medium", "low")}
+        open_all = store.query_incidents(conn, status="open")
+        counts = {p: sum(1 for r in open_all if r["priority"] == p) for p in ("critical", "high", "medium", "low")}
         buckets = insights.activity(store.recent_alerts(conn, hours=24), hours=24)
         return {"incidents": incidents, "show_all": show_all, "last_run": last_run, "counts": counts,
-                "buckets": buckets, "chart": charts.stacked_hourly(buckets), "chart_total": sum(b.total for b in buckets),
+                "filters": f, "buckets": buckets, "chart": charts.stacked_hourly(buckets),
+                "chart_total": sum(b.total for b in buckets),
                 "alerts_24h": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)}}
 
     def overview_view(conn: sqlite3.Connection) -> dict:
@@ -247,9 +254,16 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
     @app.get("/queue")
     def index():
         conn = db()
-        return render_template("index.html", **queue_view(conn, request.args.get("all") == "1"),
+        me = auth.current_user()["name"]
+        filters = {"priority": request.args.get("priority") or None,
+                   "status": request.args.get("status") or None,
+                   "q": request.args.get("q") or None,
+                   "view": request.args.get("view") or None,
+                   "assignee": me if request.args.get("assignee") == "me" else None}
+        show_all = request.args.get("all") == "1"
+        return render_template("index.html", **queue_view(conn, show_all, filters),
                                chat_scope="overview", chat=store.chat_history(conn, "overview"),
-                               suggestions=assistant.SUGGESTED_OVERVIEW)
+                               suggestions=assistant.SUGGESTED_OVERVIEW, verdicts=approval.VERDICTS)
 
     @app.get("/incident/<inc_id>")
     def incident(inc_id: str):
@@ -441,6 +455,36 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         do(lambda: approval.close_incident(db(), inc_id, by, request.form.get("note", ""),
                                            request.form.get("verdict", "")), f"{inc_id} closed")
         return redirect(url_for("incident", inc_id=inc_id))
+
+    @app.post("/incident/<inc_id>/assign")
+    def assign(inc_id: str):
+        deny_viewer()
+        conn = db()
+        if store.get_incident(conn, inc_id) is None:
+            abort(404)
+        who = actor() if request.form.get("to") == "me" else None
+        store.assign_incident(conn, inc_id, who)
+        with conn:
+            store.audit(conn, actor(), "incident_assigned", inc_id, assignee=who or "(unassigned)")
+        flash(f"{inc_id} {'assigned to ' + who if who else 'unassigned'}.", "ok")
+        return redirect(request.form.get("back") or url_for("incident", inc_id=inc_id))
+
+    @app.post("/incidents/bulk-close")
+    def bulk_close():
+        deny_viewer()
+        ids = [i for i in request.form.getlist("ids") if i][:200]
+        if not ids:
+            flash("Select at least one incident.", "error")
+            return redirect(url_for("index"))
+        def run():
+            res = approval.bulk_close(db(), ids, actor(), request.form.get("verdict", ""),
+                                      request.form.get("note", ""))
+            msg = f"Closed {res['closed']} incident(s)."
+            if res["errors"]:
+                msg += f" {len(res['errors'])} could not close (approved actions pending)."
+            return msg
+        do(run, "")
+        return redirect(request.form.get("back") or url_for("index"))
 
     @app.post("/incident/<inc_id>/respond")
     def respond(inc_id: str):

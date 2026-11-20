@@ -28,15 +28,49 @@
   {% include "_activity_chart.html" %}
 
   <h2 class="section-title">Queue</h2>
+
+  <nav class="views" aria-label="Quick views">
+    {% set v = filters %}
+    <a href="{{ url_for('index') }}" class="chip {{ 'on' if not (v.view or v.priority or v.status or v.q or v.assignee) }}">Open</a>
+    <a href="{{ url_for('index', view='needs_approval') }}" class="chip {{ 'on' if v.view == 'needs_approval' }}">Needs approval</a>
+    <a href="{{ url_for('index', priority='critical') }}" class="chip {{ 'on' if v.priority == 'critical' }}">Critical</a>
+    <a href="{{ url_for('index', priority='high') }}" class="chip {{ 'on' if v.priority == 'high' }}">High</a>
+    <a href="{{ url_for('index', assignee='me') }}" class="chip {{ 'on' if v.assignee }}">Assigned to me</a>
+    <a href="{{ url_for('index', status='closed') }}" class="chip {{ 'on' if v.status == 'closed' }}">Closed</a>
+  </nav>
+
+  <form class="filters" method="get" action="{{ url_for('index') }}">
+    <select name="priority" aria-label="Priority">
+      <option value="">any priority</option>
+      {% for p in ['critical','high','medium','low'] %}<option value="{{ p }}" {{ 'selected' if v.priority == p }}>{{ p }}</option>{% endfor %}
+    </select>
+    <select name="status" aria-label="Status">
+      <option value="">open</option>
+      <option value="closed" {{ 'selected' if v.status == 'closed' }}>closed</option>
+      <option value="all" {{ 'selected' if v.status == 'all' }}>all</option>
+    </select>
+    <input name="q" value="{{ v.q or '' }}" placeholder="search title or id…" maxlength="80" aria-label="Search">
+    <button class="btn" type="submit">Filter</button>
+    {% if v.priority or v.status or v.q or v.view or v.assignee %}<a class="btn" href="{{ url_for('index') }}">Clear</a>{% endif %}
+  </form>
+
   {% if incidents %}
+  <form method="post" action="{{ url_for('bulk_close') }}" id="bulk-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="back" value="{{ request.full_path }}">
   <div class="table-wrap">
   <table class="list queue">
-    <thead><tr><th>Priority</th><th>Incident</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th></tr></thead>
+    <thead><tr>
+      {% if can_act %}<th class="chk"><input type="checkbox" id="chk-all" aria-label="Select all"></th>{% endif %}
+      <th>Priority</th><th>Incident</th><th>Assignee</th><th>Alerts</th><th>Proposals</th><th>Last seen (UTC)</th><th>Status</th>
+    </tr></thead>
     <tbody>
     {% for i in incidents %}{% set r = i.row %}
       <tr class="row-{{ r['priority'] }}">
+        {% if can_act %}<td class="chk"><input type="checkbox" name="ids" value="{{ r['id'] }}" aria-label="Select {{ r['id'] }}"></td>{% endif %}
         <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
         <td><a class="row-title" href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><code class="muted">{{ r['id'] }}</code></td>
+        <td>{% if r['assignee'] %}<span class="tag">{{ r['assignee'] }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td class="num">{{ (r['alert_ids'] | fromjson) | length }}</td>
         <td>{% if i.pending %}<span class="tag tag-attn">{{ i.pending }} pending</span>{% elif i.approved %}<span class="tag">{{ i.approved }} approved</span>{% else %}<span class="muted">{{ i.total }} resolved</span>{% endif %}</td>
         <td class="mono">{{ r['last_seen'][:16] | replace('T', ' ') }}</td>
@@ -46,11 +80,24 @@
     </tbody>
   </table>
   </div>
+  {% if can_act %}
+  <div class="bulk-bar">
+    <span><strong id="chk-count">0</strong> selected</span>
+    <select name="verdict" aria-label="Bulk verdict">
+      <option value="" selected disabled>verdict…</option>
+      {% for key, label in verdicts.items() %}<option value="{{ key }}" title="{{ label }}">{{ key | replace('_',' ') }}</option>{% endfor %}
+    </select>
+    <input name="note" placeholder="closing note (applies to all selected)" maxlength="300" aria-label="Bulk note">
+    <button class="btn btn-no" type="submit">Close selected</button>
+    <span class="muted bulk-hint">Pending proposals on selected incidents are rejected with the note, then closed.</span>
+  </div>
+  {% endif %}
+  </form>
   {% else %}
   <div class="empty">
     <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
-    <p><strong>Queue is empty.</strong> Nothing needs a decision right now.</p>
-    {% if not show_all %}<p><a href="{{ url_for('index', all='1') }}">Show closed incidents</a></p>{% endif %}
+    <p><strong>No incidents match.</strong> Nothing needs a decision right now.</p>
+    {% if v.priority or v.status or v.q or v.view or v.assignee %}<p><a href="{{ url_for('index') }}">Clear filters</a></p>{% endif %}
   </div>
   {% endif %}
 </div>

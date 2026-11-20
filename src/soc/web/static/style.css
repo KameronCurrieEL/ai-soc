@@ -395,3 +395,13 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
 .just-changed { animation: kpi-flash 1.2s ease-out; }
 @keyframes kpi-flash { from { color: var(--accent); } to { color: inherit; } }
 @media (prefers-reduced-motion: reduce) { .just-changed { animation: none; } }
+
+/* ---------- triage: views, filters, bulk ---------- */
+.views { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.views .chip { text-decoration: none; }
+.views .chip.on { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--text); }
+.queue .chk { width: 32px; text-align: center; }
+.bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px;
+            background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.bulk-bar #chk-count { font-variant-numeric: tabular-nums; }
+.bulk-hint { font-size: 12px; flex-basis: 100%; }

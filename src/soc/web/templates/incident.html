@@ -10,10 +10,17 @@
       <span class="badge b-{{ inc['priority'] }}">{{ inc['priority'] }}</span>
       <span class="status s-{{ inc['status'] }}">{{ inc['status'] }}</span>
       {% if inc['verdict'] %}<span class="tag">{{ inc['verdict'] | replace('_', ' ') }}</span>{% endif %}
+      {% if inc['assignee'] %}<span class="tag" title="assignee">@{{ inc['assignee'] }}</span>{% endif %}
     </div>
     <h1>{{ inc['title'] }}</h1>
     <p class="meta"><code>{{ inc['id'] }}</code> · {{ inc['first_seen'][:19] | replace('T', ' ') }} &rarr;
-      {{ inc['last_seen'][11:19] }} UTC · {{ (inc['alert_ids'] | fromjson) | length }} alerts</p>
+      {{ inc['last_seen'][11:19] }} UTC · {{ (inc['alert_ids'] | fromjson) | length }} alerts
+      {% if can_act %}·
+      <form method="post" action="{{ url_for('assign', inc_id=inc['id']) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if inc['assignee'] == analyst %}<button class="linklike" name="to" value="" type="submit">unassign</button>
+        {% else %}<button class="linklike" name="to" value="me" type="submit">assign to me</button>{% endif %}
+      </form>{% endif %}</p>
   </div>
   <div class="head-stats">
     <div><strong>{{ pending }}</strong><span>pending</span></div>

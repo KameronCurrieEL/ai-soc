@@ -120,6 +120,28 @@ def close_incident(conn: sqlite3.Connection, incident_id: str, actor: str, note:
         audit(conn, actor, "incident_closed", incident_id, verdict=verdict, note=note)
 
 
+def bulk_close(conn: sqlite3.Connection, incident_ids: list[str], actor: str, verdict: str, note: str) -> dict:
+    """Triage: close many incidents at once. Any still-pending/approved proposals are rejected with the
+    note first (so noise can be cleared in one action), then the incident is closed. Each step is audited.
+    Returns {closed, skipped, errors}."""
+    actor = _check_actor(actor)
+    if verdict not in VERDICTS:
+        raise ApprovalError(f"a verdict is required: one of {', '.join(VERDICTS)}")
+    if not note.strip():
+        raise ApprovalError("a closing note is required")
+    closed, errors = 0, []
+    for inc_id in incident_ids:
+        try:
+            for p in conn.execute("SELECT id FROM proposals WHERE incident_id = ? AND status = 'proposed'",
+                                  (inc_id,)).fetchall():
+                reject(conn, p["id"], actor, f"bulk close: {note}")
+            close_incident(conn, inc_id, actor, note, verdict)
+            closed += 1
+        except ApprovalError as exc:
+            errors.append(f"{inc_id}: {exc}")
+    return {"closed": closed, "skipped": len(incident_ids) - closed, "errors": errors}
+
+
 def run_autopilot(conn: sqlite3.Connection, dry_run: bool = True) -> list[dict]:
     """Act without a human on RULE-critical containment only (CLAUDE.md D6).
 

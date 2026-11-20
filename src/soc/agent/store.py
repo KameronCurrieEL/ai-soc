@@ -165,6 +165,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         acols = {r["name"] for r in conn.execute("PRAGMA table_info(alerts)")}
         if acols and "sensor" not in acols:
             conn.execute("ALTER TABLE alerts ADD COLUMN sensor TEXT NOT NULL DEFAULT 'wazuh-lab'")
+        if "assignee" not in cols:          # triage: who owns this incident
+            conn.execute("ALTER TABLE incidents ADD COLUMN assignee TEXT")
 
 
 ALERT_RETENTION_DAYS = 7
@@ -367,6 +369,33 @@ def list_incidents(conn: sqlite3.Connection, status: str | None = "open") -> lis
     if status:
         return conn.execute(f"SELECT * FROM incidents WHERE status = ? ORDER BY {order}", (status,)).fetchall()
     return conn.execute(f"SELECT * FROM incidents ORDER BY {order}").fetchall()
+
+
+_ORDER = ("CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, "
+          "last_seen DESC")
+
+
+def query_incidents(conn: sqlite3.Connection, status: str | None = "open", priority: str | None = None,
+                    q: str | None = None, assignee: str | None = None) -> list[sqlite3.Row]:
+    """Filtered incident list for triage. All filters optional; parameterized (injection-safe)."""
+    where, params = ["1=1"], []
+    if status in ("open", "closed"):
+        where.append("status = ?"); params.append(status)
+    if priority in ("low", "medium", "high", "critical"):
+        where.append("priority = ?"); params.append(priority)
+    if assignee is not None:
+        where.append("assignee = ?"); params.append(assignee)
+    if q and q.strip():
+        where.append("(title LIKE ? OR id LIKE ? OR key LIKE ?)")
+        params += [f"%{q.strip()}%"] * 3
+    return conn.execute(f"SELECT * FROM incidents WHERE {' AND '.join(where)} ORDER BY {_ORDER}", params).fetchall()
+
+
+def assign_incident(conn: sqlite3.Connection, incident_id: str, assignee: str | None) -> bool:
+    with conn:
+        cur = conn.execute("UPDATE incidents SET assignee = ?, updated_at = ? WHERE id = ?",
+                           (assignee, now(), incident_id))
+    return cur.rowcount == 1
 
 
 def get_incident(conn: sqlite3.Connection, incident_id: str) -> sqlite3.Row | None:

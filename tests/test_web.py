@@ -549,3 +549,52 @@ def test_overview_json_requires_login(tmp_path):
     db = tmp_path / "soc.db"
     anon = make_client(db, login=False)
     assert anon.get("/api/overview.json").status_code == 401
+
+
+# ---------- triage workflow (#3) ----------
+
+def test_queue_filters_quick_views_and_search(env):
+    client, db, inc_id = env
+    page = client.get("/queue").get_data(as_text=True)
+    assert "Needs approval" in page and 'name="q"' in page            # views + filter bar present
+    # the fixture incident is high with a pending proposal -> shows under needs_approval and priority=high
+    assert inc_id in client.get("/queue?view=needs_approval").get_data(as_text=True)
+    assert inc_id in client.get("/queue?priority=high").get_data(as_text=True)
+    assert inc_id not in client.get("/queue?priority=low").get_data(as_text=True)
+    assert inc_id in client.get("/queue?q=Brute").get_data(as_text=True)
+    assert inc_id not in client.get("/queue?q=zzzznomatch").get_data(as_text=True)
+
+
+def test_assign_to_me_and_filter(env):
+    client, db, inc_id = env
+    t = token(client, f"/incident/{inc_id}")
+    client.post(f"/incident/{inc_id}/assign", data={"to": "me", "csrf_token": t})
+    from soc.agent.store import connect as _c, get_incident
+    assert get_incident(_c(db), inc_id)["assignee"] == "kameron"
+    assert inc_id in client.get("/queue?assignee=me").get_data(as_text=True)
+    client.post(f"/incident/{inc_id}/assign", data={"to": "", "csrf_token": t})
+    assert get_incident(_c(db), inc_id)["assignee"] is None
+
+
+def test_bulk_close_from_queue(env):
+    client, db, inc_id = env
+    t = token(client, "/queue")
+    r = client.post("/incidents/bulk-close",
+                    data={"ids": [inc_id], "verdict": "benign", "note": "batch lab noise", "csrf_token": t},
+                    follow_redirects=True)
+    assert "Closed 1 incident" in r.get_data(as_text=True)
+    from soc.agent.store import connect as _c, get_incident
+    assert get_incident(_c(db), inc_id)["status"] == "closed"
+
+
+def test_triage_actions_blocked_for_viewer(tmp_path):
+    from soc.agent.store import connect, save_incidents
+    db = tmp_path / "soc.db"
+    conn = connect(db)
+    inc = Incident("k", "BF", "high", "2026-11-17T10:00:00.000+0000", "2026-11-17T10:01:00.000+0000",
+                   ["a1"], [Proposal("investigate", "x", "high", "brute_force", "r")], [], [])
+    save_incidents(conn, [inc]); conn.close()
+    viewer = make_client(db, role="viewer", name="val")
+    t = token(viewer, "/queue")
+    assert viewer.post("/incidents/bulk-close", data={"ids": [inc.id], "verdict": "benign", "note": "x", "csrf_token": t}).status_code == 403
+    assert viewer.post(f"/incident/{inc.id}/assign", data={"to": "me", "csrf_token": t}).status_code == 403
