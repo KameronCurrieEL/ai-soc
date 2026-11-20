@@ -25,11 +25,13 @@
   <div class="vfd vfd-info"><span class="vfd-label">Alerts · 24 h</span><strong>{{ chart_total }}</strong><small>stored</small></div>
 </section>
 
-<div class="layout">
-<div class="layout-main">
+<div class="ops">
   {% include "_activity_chart.html" %}
+  {% include "_assistant.html" %}
+</div>
 
-  <h2 class="section-title">Queue</h2>
+<section class="bay">
+  <h2 class="section-title">Queue <small>strip bay · open first</small></h2>
 
   <nav class="views" aria-label="Quick views">
     {% set v = filters %}
@@ -102,9 +104,5 @@
     {% if v.priority or v.status or v.q or v.view or v.assignee %}<p><a href="{{ url_for('index') }}">Clear filters</a></p>{% endif %}
   </div>
   {% endif %}
-</div>
-<aside class="layout-aside">
-  {% include "_assistant.html" %}
-</aside>
-</div>
+</section>
 {% endblock %}

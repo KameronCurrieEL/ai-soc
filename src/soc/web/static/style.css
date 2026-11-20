@@ -285,21 +285,54 @@ details.raw summary { cursor: pointer; color: var(--muted); margin-bottom: 10px;
 .as-input textarea { flex: 1; resize: vertical; min-height: 42px; max-height: 160px; }
 .as-form.busy .as-input textarea { opacity: .7; }
 
-/* ---------- chart ---------- */
+/* ---------- radar scope (CRT in a bezel) ---------- */
+.scope-unit { padding: 14px; margin-bottom: 14px; min-width: 0; }
 .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.legend { list-style: none; display: flex; gap: 14px; margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
-.legend li { display: flex; align-items: center; gap: 6px; }
-.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-span.seg-low { background: var(--p-low); } span.seg-medium { background: var(--p-medium); }
-span.seg-high { background: var(--p-high); } span.seg-critical { background: var(--p-critical); }
-svg.bars { width: 100%; height: auto; display: block; margin-top: 10px; }
-.bars rect.seg-low { fill: var(--p-low); } .bars rect.seg-medium { fill: var(--p-medium); }
-.bars rect.seg-high { fill: var(--p-high); } .bars rect.seg-critical { fill: var(--p-critical); }
-.bars .hit { fill: transparent; }
-.bars .hour:hover .hit { fill: var(--panel-2); }
-.bars .axis { stroke: var(--line-2); stroke-width: 1; }
-.bars .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; }
-.bars .tick { fill: var(--muted); font: 10px var(--mono); stroke: none; }
+.bezel { background: linear-gradient(145deg, #2d3034, #191a1c); border-radius: 14px; padding: 12px; border: 1px solid #0c0c0d;
+         box-shadow: inset 0 1px 0 #4a4e53; display: grid; gap: 10px; }
+.crt { position: relative; background: radial-gradient(circle at 50% 45%, #0a1d20, var(--crt) 70%); border-radius: 10px; overflow: hidden;
+       box-shadow: inset 0 0 40px rgb(0 0 0 / .9); display: grid; place-items: center; padding: 10px; }
+.crt::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+              background: repeating-linear-gradient(0deg, rgb(0 0 0 / .16) 0 1px, transparent 1px 3px); }
+svg.radar { width: 100%; max-width: 440px; height: auto; display: block; position: relative; z-index: 1; overflow: visible; }
+.sweep { position: absolute; width: min(75%, 330px); aspect-ratio: 1; border-radius: 50%; left: 50%; top: 50%; translate: -50% -50%;
+         background: conic-gradient(from 0deg, transparent 0deg 300deg, rgb(111 207 191 / .16) 357deg, rgb(111 207 191 / .45) 360deg);
+         animation: sweep 7s linear infinite; }
+@keyframes sweep { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .sweep { animation: none; rotate: 150deg; } }
+.radar .ring { fill: none; stroke: var(--phos-line); stroke-width: 1; }
+.radar .ring-label, .radar .hour-label { fill: var(--phos-dim); font: 9px var(--mono); }
+.radar .tick-mark { stroke: #2a5c58; stroke-width: 1; }
+.radar .tick-mark.major { stroke: var(--phos-dim); }
+.radar .crosshair { stroke: #2a5c58; stroke-width: 1; }
+.radar .now-hand { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: .55; }
+.radar .wedge { fill: var(--accent); fill-opacity: .7; stroke: none; }
+.radar .hour:hover .wedge { fill-opacity: 1; }
+.radar .blip { --c: var(--low); cursor: pointer; }
+.radar .blip.p-critical { --c: var(--crit); } .radar .blip.p-high { --c: var(--high); } .radar .blip.p-medium { --c: var(--med); }
+.radar .blip .dot { fill: var(--c); stroke: none; }
+.radar .blip .halo { fill: none; stroke: var(--c); stroke-opacity: .5; stroke-width: 1.2; }
+.radar .blip-id { fill: var(--c); font: 700 10.5px var(--mono); }
+.radar .blip-sub { fill: var(--phos-text); fill-opacity: .8; font: 9.5px var(--mono); }
+.radar .blip.closed { opacity: .4; }
+.radar .blip:hover .blip-id, .radar .blip:focus .blip-id { text-decoration: underline; }
+.radar .blip:focus { outline: none; }
+.radar .blip:focus-visible .dot { stroke: #fff; stroke-width: 2; }
+@media (prefers-reduced-motion: no-preference) { .radar .blip:not(.closed) .halo { animation: ping 2.4s ease-out infinite; transform-box: fill-box; transform-origin: center; } }
+@keyframes ping { 0% { scale: .6; stroke-opacity: .8; } 100% { scale: 1.6; stroke-opacity: 0; } }
+.crt-cap { position: absolute; font: 10px/1.35 var(--mono); color: var(--phos-dim); letter-spacing: .1em; text-transform: uppercase; z-index: 2; }
+.crt-cap.tl { left: 12px; top: 10px; } .crt-cap.tr { right: 12px; top: 10px; text-align: right; } .crt-cap.bl { left: 12px; bottom: 10px; }
+.bezel-legend { list-style: none; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin: 0; padding: 0;
+                font: 600 10.5px var(--label); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.bezel-legend li { display: flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw-closed { background: #3b3e42; }
+
+/* queue page: radar + comms side by side, strip bay below */
+.ops { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 14px; align-items: stretch; margin-bottom: 4px; }
+.ops .scope-unit { margin-bottom: 0; }
+.ops .assistant { max-height: none; height: 100%; }
+.ops .as-log { max-height: 380px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1200px) {
@@ -341,7 +374,7 @@ svg.bars { width: 100%; height: auto; display: block; margin-top: 10px; }
              border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px; }
 
 /* ---------- overview dashboard ---------- */
-.ov-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+.ov-grid { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .ov-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 4px; }
 
 .sevbar { width: 100%; height: 26px; display: block; border-radius: 5px; overflow: hidden; margin: 4px 0 14px; background: var(--panel-2); }
@@ -359,6 +392,7 @@ svg.bars { width: 100%; height: auto; display: block; margin-top: 10px; }
 .rank .count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
 
 @media (max-width: 1100px) {
+  .ops { grid-template-columns: minmax(0, 1fr); }
   .ov-grid, .ov-grid-3 { grid-template-columns: 1fr; }
 }
 

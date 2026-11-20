@@ -184,7 +184,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         pending_total = conn.execute("SELECT COUNT(*) n FROM proposals WHERE status = 'proposed'").fetchone()["n"]
         return {"incidents": incidents, "show_all": show_all, "last_run": last_run, "counts": counts,
                 "pending_total": pending_total,
-                "filters": f, "buckets": buckets, "chart": charts.stacked_hourly(buckets),
+                "filters": f, "buckets": buckets, "radar": charts.radar_24h(buckets, store.list_incidents(conn, None)),
                 "chart_total": sum(b.total for b in buckets),
                 "alerts_24h": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)}}
 
@@ -207,7 +207,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         ents = insights.entities(store.recent_alerts(conn, hours=store.ALERT_RETENTION_DAYS * 24))
         last_run = conn.execute("SELECT * FROM audit_log WHERE event = 'pipeline_run' ORDER BY id DESC LIMIT 1").fetchone()
         return {"counts": counts, "open_total": len(open_incs), "pending": pending, "approved": approved,
-                "autopilot_24h": autop, "buckets": buckets, "chart": charts.stacked_hourly(buckets),
+                "autopilot_24h": autop, "buckets": buckets, "radar": charts.radar_24h(buckets, store.list_incidents(conn, None)),
                 "chart_total": sum(b.total for b in buckets), "alerts_24h": sum(b.total for b in buckets),
                 "alerts_24h_by_prio": {p: sum(b.counts.get(p, 0) for b in buckets) for p in reversed(insights.PRIORITY_ORDER)},
                 "mttr": totals.median_close_minutes, "fp_rate": totals.fp_rate, "family_stats": stats,
