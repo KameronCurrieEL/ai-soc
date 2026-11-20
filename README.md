@@ -1,4 +1,6 @@
-# AI-Assisted SOC (home lab)
+# VARDR
+
+**An AI-assisted SOC for a home lab.** *Vörðr* is Old Norse for a guardian spirit that watches over a home and its people.
 
 A local, zero-cost security operations pipeline: **Wazuh SIEM → Python → local LLM analyst → deterministic decision engine → human approval → (dry-run) response**, with a hardened web console for the analyst.
 
@@ -9,6 +11,8 @@ Everything runs on one laptop: Wazuh in Docker, Python in WSL2, the language mod
 ---
 
 ## Screenshots
+
+> Screenshots show the console before the VARDR redesign ([D10](docs/decisions.md)); updated captures coming.
 
 | Incident queue | Live alerts | Incident detail |
 |---|---|---|
@@ -56,7 +60,7 @@ flowchart LR
 | Agent + approval | `src/soc/agent/` | Groups decisions into incidents, SQLite queue, approval state machine, append-only audit log (DB triggers) |
 | Response | `src/soc/response/` | Strict target validation, command + rollback per action (Windows PowerShell + RHEL firewalld). **Dry-run only** |
 | Responder agent | `src/soc/ai/responder.py` + `redteam/` | Reads an incident, predicts attacker next steps with vendored red-team skills, suggests defensive actions to approve; optional bounded autopilot |
-| Web console | `src/soc/web/` | Flask + Jinja2. Incident pages, entity pivots, offline GeoIP, activity chart, detection-quality metrics, AI assistant chat (advisory, streaming) |
+| Web console | `src/soc/web/` | Flask + Jinja2. Incident pages, entity pivots, offline GeoIP, 24h radar scope, detection-quality metrics, AI assistant chat (advisory, streaming) |
 
 ---
 
@@ -93,7 +97,7 @@ Writeups: [Prompt injection against the AI analyst](docs/writeups/01-prompt-inje
 - Binds 127.0.0.1; rejects foreign `Host` headers (DNS rebinding).
 - CSRF token on every POST (constant-time compare), SameSite=Strict HttpOnly cookie.
 - Autoescaping everywhere: usernames and targets come from attacker-controlled logs (XSS).
-- CSP `default-src 'self'; frame-ancestors 'none'`: no inline scripts or styles, nothing loaded from elsewhere. The activity chart is server-rendered SVG. The only script is the optional assistant streamer, served from the console itself, which inserts text with `textContent`, never as HTML ([D5](docs/decisions.md)).
+- CSP `default-src 'self'; frame-ancestors 'none'`: no inline scripts or styles, nothing loaded from elsewhere. The 24h radar is server-rendered SVG and the fonts are self-hosted. The only script is the optional assistant streamer, served from the console itself, which inserts text with `textContent`, never as HTML ([D5](docs/decisions.md)).
 - Debug mode never enabled.
 
 **Privacy**
@@ -106,7 +110,14 @@ Writeups: [Prompt injection against the AI analyst](docs/writeups/01-prompt-inje
 
 `make web` → http://localhost:8765
 
-- **Queue:** open incidents by priority, plus a 24-hour alert activity chart stacked by priority.
+The console is designed as a rack-mounted instrument ([D10](docs/decisions.md)), and the look carries meaning:
+**teal phosphor is the machine** (radar, live feed, AI), **amber means a human has to act** (it lights up only
+when something is waiting for you), and dangerous controls look dangerous (autopilot sits under a flip guard).
+
+- **Overview:** glowing counters; press *Pending approval* to jump straight to what needs your decision.
+- **Queue:** a 24-hour **radar scope** (angle = time of day, outer wedges = alerts per hour, blips = incidents,
+  closer to the centre the more severe; click a blip to open it), with incidents listed as **flight strips**
+  coloured by priority.
 - **Incident page:**
   - plain-English summary built from parsed facts (no AI)
   - **Where:** affected host and source location (loopback = "this computer", private = "your network", public = country)
@@ -167,6 +178,10 @@ Recorded with context and trade-offs in [docs/decisions.md](docs/decisions.md):
 - **D3:** Flask for the console, and its security controls
 - **D4:** offline GeoIP
 - **D5:** AI assistant chat, and the guardrails that keep it advisory
+- **D6:** red-team responder agent and rule-only autopilot (dry-run)
+- **D7–D8:** login with roles, and a separate database per tenant
+- **D9:** real-execution engine behind a fail-closed switch
+- **D10:** the VARDR identity: rack instrument, radar, and the teal/amber colour rule
 
 ## Limitations (honest list)
 
