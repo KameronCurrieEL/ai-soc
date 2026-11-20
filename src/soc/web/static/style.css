@@ -192,6 +192,32 @@ table.list { width: 100%; border-collapse: collapse; }
 .empty svg { color: var(--ok); }
 .empty p { margin: 6px 0; }
 
+/* ---------- flight strips (queue tables) ----------
+   Each incident is a paper strip in a dark holder; the left tag is its priority colour.
+   Still a real <table>: checkboxes, bulk-close and screen readers work as before. */
+.strips { background: #101113; border: 1px solid #0b0b0c; border-radius: 3px; box-shadow: inset 0 2px 6px rgb(0 0 0 / .6); padding: 0 6px 4px; }
+.strips table.queue { border-collapse: separate; border-spacing: 0 5px; }
+.strips .queue th { background: transparent; border: 0; padding: 8px 12px 0; }
+.strips .queue tr { --tag: var(--low); }
+.strips .queue tr.row-critical { --tag: var(--crit); } .strips .queue tr.row-high { --tag: var(--high); }
+.strips .queue tr.row-medium { --tag: var(--med); }
+.strips .queue td { background: #e8ede4; color: #13201d; border-bottom: 0; border-left: 1px solid #b9c6bd; padding: 8px 12px;
+                    font: 12.5px/1.35 var(--mono); }
+.strips .queue td:first-child { border-left: 10px solid var(--tag); border-radius: 2px 0 0 2px; }
+.strips .queue td:last-child { border-radius: 0 2px 2px 0; }
+.strips .queue tbody tr:hover td { background: #f3f7f0; }
+.strips .queue tr.st-closed td { background: #c9d0c6; color: #4f5b55; }
+.strips .queue .row-title { color: #13201d; font: 700 13.5px/1.3 var(--sans); }
+.strips .queue .row-title:hover { color: #0b5d52; }
+.strips .queue code, .strips .queue .muted { color: #5b6b63; }
+.strips .badge { background: transparent; border-color: currentColor; }
+.strips .badge::before { display: none; }
+.strips .b-critical { color: #b0182b; } .strips .b-high { color: #a8420c; } .strips .b-medium { color: #7a5000; } .strips .b-low { color: #3c5d7c; }
+.strips .tag { background: #d5ddd1; border-color: #b0bdb4; color: #13201d; }
+.strips .tag-attn { background: var(--attn); border-color: #b97f00; color: #1a1200; box-shadow: 0 0 8px rgb(255 178 26 / .45); }
+.strips .status { color: #4f5b55; } .strips .s-open { color: #0b5d52; }
+.strips input[type="checkbox"] { accent-color: #0b5d52; }
+
 /* ---------- incident details ---------- */
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
 .kv dt { color: var(--muted); font-size: 13px; }

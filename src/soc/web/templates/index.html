@@ -62,7 +62,7 @@
   <form method="post" action="{{ url_for('bulk_close') }}" id="bulk-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="back" value="{{ request.full_path }}">
-  <div class="table-wrap">
+  <div class="table-wrap strips">
   <table class="list queue">
     <thead><tr>
       {% if can_act %}<th class="chk"><input type="checkbox" id="chk-all" aria-label="Select all"></th>{% endif %}
@@ -70,7 +70,7 @@
     </tr></thead>
     <tbody>
     {% for i in incidents %}{% set r = i.row %}
-      <tr class="row-{{ r['priority'] }}">
+      <tr class="row-{{ r['priority'] }} st-{{ r['status'] }}">
         {% if can_act %}<td class="chk"><input type="checkbox" name="ids" value="{{ r['id'] }}" aria-label="Select {{ r['id'] }}"></td>{% endif %}
         <td><span class="badge b-{{ r['priority'] }}">{{ r['priority'] }}</span></td>
         <td><a class="row-title" href="{{ url_for('incident', inc_id=r['id']) }}">{{ r['title'] }}</a><code class="muted">{{ r['id'] }}</code></td>
