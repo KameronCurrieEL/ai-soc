@@ -129,7 +129,7 @@ def cmd_reject(args: argparse.Namespace) -> int:
 
 def cmd_execute(args: argparse.Namespace) -> int:
     conn = store.connect()
-    return _guarded(lambda: approval.run_approved(conn, args.id, _actor(args), dry_run=True))
+    return _guarded(lambda: approval.run_approved(conn, args.id, _actor(args)))
 
 
 def cmd_close(args: argparse.Namespace) -> int:

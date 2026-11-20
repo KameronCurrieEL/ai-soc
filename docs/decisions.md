@@ -159,3 +159,28 @@ SQLite-per-tenant suits a lab and modest SaaS; a large deployment would map the 
 schema/database per tenant in Postgres. Autopilot and settings are naturally per-tenant (separate files).
 Tests prove: incidents/alerts don't leak across tenants, cross-tenant incident IDs 404, and a tenant name
 can't escape its directory (path traversal falls back to the default DB).
+
+---
+
+## D9 (2026-11-19): Real-execution engine behind a fail-closed switch
+
+**Context.** Moving toward real response (and Phase 9), the console needs to actually run containment —
+without ever doing so by accident. Owner chose: build the plumbing, keep it dry-run until deliberately enabled.
+
+**Decision.** `soc.response.execution` runs an approved plan for real only when ALL hold (else dry-run or refuse):
+1. process master switch `SOC_ALLOW_LIVE=1` (an operator/host decision, not a web toggle),
+2. the tenant's `execution_mode` setting == "live",
+3. the exact target is on the tenant's `live_allowlist`,
+4. a transport backend is registered for the plan's platform.
+No backend ships by default, so even fully enabled it refuses until an operator wires one (SSH for the
+Phase 9 Linux honeypot, WinRM/PowerShell for Windows). Approval + autopilot both go through this engine;
+live executions are audited with `live=true`. Everything is fail-closed and unit-tested (missing env,
+missing allowlist entry, missing backend, bad allowlist JSON all refuse or stay dry-run).
+
+**Why.** A security tool that can block/isolate/disable is dangerous if it fires wrongly. Four independent
+preconditions mean a single mistake (one toggle, one env var, one stray target) cannot cause a real action.
+`investigate` is never a live command. The human-approval gate and the rule-only autopilot trigger (D6) are
+unchanged; this only governs whether the executed step is simulated or real.
+
+**Consequences.** Going live is an explicit, auditable operator action with a per-target allowlist. The
+transport backends and a settings UI for the allowlist are the remaining work before Phase 9 real actions.

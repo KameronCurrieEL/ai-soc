@@ -11,12 +11,18 @@ from __future__ import annotations
 
 import sqlite3
 
-from soc.agent.store import audit, get_proposal, now
+from soc.agent.store import audit, get_proposal, get_setting, now
 from soc.decision.models import CHANGES_SYSTEM
-from soc.response.actions import InvalidTarget, execute, plan
+from soc.response import execution
+from soc.response.actions import InvalidTarget, plan
 
 PIPELINE_ACTOR = "pipeline"
 AUTOPILOT_ACTOR = "autopilot"
+
+
+def _policy(conn: sqlite3.Connection) -> execution.ExecutionPolicy:
+    """Live-execution policy for this (tenant) database. Fails closed to dry-run."""
+    return execution.resolve_policy(conn, lambda k, d="": get_setting(conn, k, d))
 
 # Standard SOC dispositions. Recorded at close; they measure how good the detections are.
 VERDICTS = {
@@ -74,20 +80,24 @@ def reject(conn: sqlite3.Connection, proposal_id: int, actor: str, reason: str) 
               action=row["action"], target=row["target"], reason=reason)
 
 
-def run_approved(conn: sqlite3.Connection, proposal_id: int, actor: str, dry_run: bool = True) -> str:
-    """Execute an APPROVED proposal (dry-run). Unapproved proposals can't get here."""
+def run_approved(conn: sqlite3.Connection, proposal_id: int, actor: str, platform: str = "windows") -> str:
+    """Execute an APPROVED proposal. Dry-run unless live execution is enabled (env + tenant + allowlist +
+    backend); see soc.response.execution. Unapproved proposals can't get here."""
     actor = _check_actor(actor)
     row = get_proposal(conn, proposal_id)
     if row is None:
         raise ApprovalError(f"proposal {proposal_id} not found")
     if row["status"] != "approved":
         raise ApprovalError(f"proposal {proposal_id} is {row['status']!r}; only approved proposals can run")
-    p = plan(row["action"], row["target"])
-    output = execute(p, dry_run=dry_run)
+    p = plan(row["action"], row["target"], platform=platform)
+    try:
+        output, was_live = execution.run(p, _policy(conn), platform=platform)
+    except execution.ExecutionRefused as exc:
+        raise ApprovalError(str(exc)) from None
     with conn:
         _transition(conn, proposal_id, "approved", "executed")
-        audit(conn, actor, "proposal_executed", row["incident_id"], proposal_id, dry_run=dry_run,
-              command=p.command, rollback=p.rollback, output=output)
+        audit(conn, actor, "proposal_executed", row["incident_id"], proposal_id, dry_run=not was_live,
+              live=was_live, command=p.command, rollback=p.rollback, output=output)
     return output
 
 
@@ -125,17 +135,18 @@ def run_autopilot(conn: sqlite3.Connection, dry_run: bool = True) -> list[dict]:
         "SELECT p.* FROM proposals p JOIN incidents i ON i.id = p.incident_id "
         "WHERE p.status = 'proposed' AND p.source = 'rule' AND p.priority = 'critical' AND i.status = 'open'"
     ).fetchall()
+    policy = _policy(conn)
     acted, flagged = [], set()
     for row in rows:
         if row["action"] not in CHANGES_SYSTEM:
             continue
         try:
             p = plan(row["action"], row["target"])
-        except InvalidTarget as exc:
+            output, was_live = execution.run(p, policy)       # dry-run unless live is enabled
+        except (InvalidTarget, execution.ExecutionRefused) as exc:
             with conn:
                 audit(conn, AUTOPILOT_ACTOR, "approval_refused", row["incident_id"], row["id"], error=str(exc))
             continue
-        output = execute(p, dry_run=dry_run)
         with conn:
             if row["incident_id"] not in flagged:
                 audit(conn, AUTOPILOT_ACTOR, "autopilot_engaged", row["incident_id"],
@@ -145,8 +156,8 @@ def run_autopilot(conn: sqlite3.Connection, dry_run: bool = True) -> list[dict]:
             audit(conn, AUTOPILOT_ACTOR, "proposal_approved", row["incident_id"], row["id"],
                   action=row["action"], target=row["target"], note="autopilot (rule-critical)")
             _transition(conn, row["id"], "approved", "executed")
-            audit(conn, AUTOPILOT_ACTOR, "proposal_executed", row["incident_id"], row["id"], dry_run=dry_run,
-                  command=p.command, rollback=p.rollback, output=output)
+            audit(conn, AUTOPILOT_ACTOR, "proposal_executed", row["incident_id"], row["id"], dry_run=not was_live,
+                  live=was_live, command=p.command, rollback=p.rollback, output=output)
         acted.append({"proposal_id": row["id"], "incident_id": row["incident_id"],
                       "action": row["action"], "target": row["target"], "output": output})
     return acted

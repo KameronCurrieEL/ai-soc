@@ -384,7 +384,7 @@ def create_app(db_path: Path | str = store.DB_PATH, pipeline_runner=None, llm_fa
         elif verb == "reject":
             do(lambda: approval.reject(conn, pid, by, request.form.get("reason", "")), f"Proposal #{pid} rejected")
         elif verb == "execute":
-            do(lambda: approval.run_approved(conn, pid, by, dry_run=True), f"Proposal #{pid} executed (dry-run)")
+            do(lambda: approval.run_approved(conn, pid, by), f"Proposal #{pid} executed")
         else:
             abort(404)
         return redirect(url_for("incident", inc_id=p["incident_id"]))
